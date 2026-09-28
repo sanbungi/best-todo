@@ -1,7 +1,9 @@
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
+import { login, authorize, logout } from './auth.js';
+import { seed } from './seed.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { entryKind, entryCells } from './entry-validation.js';
@@ -30,37 +32,22 @@ if (!columns.includes('sortOrder')) {
   db.exec('ALTER TABLE tasks ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0');
   db.exec('UPDATE tasks SET sortOrder=rowid');
 }
-if (!db.prepare('SELECT id FROM lists LIMIT 1').get()) {
-  const add = db.prepare('INSERT INTO lists VALUES (?, ?)');
-  [
-    ['inbox', 'タスク'],
-    ['ideas', 'アイディア'],
-    ['print', '3Dプリントしたいもの'],
-    ['infra', 'インフラ'],
-    ['travel', '旅'],
-    ['youtube', 'YouTube'],
-    ['blog', 'blog'],
-    ['wish', 'ほしい物リスト'],
-  ].forEach((v) => add.run(...v));
-  [
-    'pcスマホの履歴から日記自動',
-    'センサーと自動農業',
-    '気象観測装置',
-    'タイムアタックゴルフ、格闘あり',
-    '進路をバイブで教えてくれる歩き',
-    'osmをゲームのマップとして変換する、マルチプレイで陣取り合戦',
-    '指定時刻にAPIを呼び出す仕組み',
-    '教育用のマルチプレイ、バーチャル机',
-    'プロンプトシェアアプリ',
-    'dnsサーバーを作ろう',
-    'ニッチ言語系コントリビュート',
-    '新しいアプリのスケッチ',
-  ].forEach((title) =>
-    db
-      .prepare('INSERT INTO tasks (id,listId,title,createdAt) VALUES (?,?,?,?)')
-      .run(randomUUID(), 'ideas', title, new Date().toISOString()),
-  );
+db.prepare('INSERT OR IGNORE INTO lists VALUES (?, ?)').run('inbox', 'タスク');
+if (process.env.SEED_DATA === 'true') {
+  if (process.env.NODE_ENV === 'production') throw new Error('Production seed is disabled');
+  seed(db);
 }
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((v) => v.trim())
+  .filter(Boolean)
+  .map((v) => {
+    try {
+      return new URL(v).origin;
+    } catch {
+      return v.replace(/\/$/, '');
+    }
+  });
 db.exec('UPDATE tasks SET sortOrder=rowid WHERE sortOrder=0');
 const decode = (row) =>
   row && {
@@ -119,9 +106,28 @@ export const server = http.createServer(async (req, res) => {
     const p = url.pathname;
     const method = req.method;
     if (p.startsWith('/api/')) {
-      if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`)
-        fail(403, 'このアクセス元は許可されていません');
+      res.setHeader('Vary', 'Origin');
+      if (req.headers.origin) {
+        if (!allowedOrigins.includes(req.headers.origin))
+          fail(403, 'このアクセス元は許可されていません');
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+      }
+      if (method === 'OPTIONS') {
+        res.writeHead(204);
+        return res.end();
+      }
       if (p === '/api/health' && method === 'GET') return send(200, { status: 'ok' });
+      if (p === '/api/auth/login' && method === 'POST') {
+        const b = await body(req);
+        return send(200, login(b.username, b.password));
+      }
+      const token = authorize(req);
+      if (p === '/api/auth/logout' && method === 'POST') {
+        logout(token);
+        return send(200, { loggedOut: true });
+      }
       if (p === '/api/lists' && method === 'GET')
         return send(200, db.prepare('SELECT * FROM lists ORDER BY rowid').all());
       if (p === '/api/lists' && method === 'POST') {
@@ -275,26 +281,7 @@ export const server = http.createServer(async (req, res) => {
       }
       fail(404, 'APIが見つかりません');
     }
-    if (method !== 'GET') fail(405, '対応していないメソッドです');
-    const files = {
-      '/': 'index.html',
-      '/app.js': 'app.js',
-      '/task-utils.js': 'task-utils.js',
-      '/reorder.js': 'reorder.js',
-      '/style.css': 'style.css',
-    };
-    if (!files[p]) fail(404, 'ページがありません');
-    res.writeHead(200, {
-      'Content-Type': p.endsWith('.js')
-        ? 'text/javascript; charset=utf-8'
-        : p.endsWith('.css')
-          ? 'text/css; charset=utf-8'
-          : 'text/html; charset=utf-8',
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy':
-        "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
-    });
-    res.end(readFileSync(path.join(root, 'public', files[p])));
+    fail(404, 'APIが見つかりません');
   } catch (error) {
     if (!error.status) console.error(error);
     send(error.status || 500, {

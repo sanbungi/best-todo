@@ -194,6 +194,69 @@ textarea:focus-visible {
 .new-list span {
   font-size: 14px;
 }
+.server-tab {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 0 10px 8px;
+  padding: 12px 14px;
+  border-radius: 5px;
+  text-align: left;
+  font-size: 14px;
+}
+.server-tab:hover,
+.server-tab.active {
+  background: #383838;
+}
+.server-panel {
+  max-width: 620px;
+  background: #242424;
+  border: 1px solid #373737;
+  border-radius: 14px;
+  padding: 24px;
+}
+.server-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.server-preview small {
+  display: block;
+  color: #999;
+  margin-top: 5px;
+}
+#server-form {
+  display: grid;
+  gap: 16px;
+}
+#server-form label {
+  display: grid;
+  gap: 8px;
+  color: #cfcfcf;
+}
+#server-form input {
+  width: 100%;
+  border: 1px solid #454545;
+  border-radius: 8px;
+  background: #1c1c1c;
+  color: #eee;
+  padding: 11px 12px;
+}
+#server-form input[readonly] {
+  color: #aaa;
+}
+.server-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.server-actions button {
+  border: 1px solid #454545;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
 .local-status {
   padding: 0 24px 16px;
   font-size: 10px;
@@ -1370,32 +1433,464 @@ dialog {
 }
 .composer .mode-switch {
   display: grid;
-  grid-template-columns: repeat(3, 80px);
-  gap: 6px;
-  margin-bottom: 10px;
+  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr) 1px minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+  margin: 0 0 8px;
+  padding: 0;
+  background: #252525;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.composer .mode-divider {
+  width: 1px;
+  height: 22px;
+  background: #5c5c5c;
 }
 .composer .mode-switch button {
   width: 100%;
-  height: 34px;
+  height: 44px;
   padding: 0 8px;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 16px;
 }
 .composer .mode-switch button span {
   width: 16px;
   text-align: center;
   line-height: 1;
 }
-.composer #add-form.add-task {
-  padding: 0 12px;
+.login-form {
+  width: min(440px, 90vw);
+  margin: auto;
+  padding: 24px;
 }
-.composer #new-task {
-  height: 48px;
+.login-form label {
+  display: block;
+  margin: 20px 0;
 }
-.composer #new-task {
-  height: 72px;
+.login-form input {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-top: 8px;
+}
+.login-form p {
+  line-height: 1.6;
+  font-size: 13px;
+}
+.local-status button {
+  margin-left: 8px;
+}
+
+/* Shared input language: same height, radius, border, and action placement. */
+.control {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid #4a4a4a;
+  border-radius: 8px;
+  background: #1c1c1c;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.control::placeholder,
+.search input::placeholder,
+.composer textarea::placeholder,
+.composer #new-task::placeholder,
+.cell-input input::placeholder {
+  color: #9d9d9d;
+}
+.control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+textarea.control {
+  min-height: 112px;
+  resize: vertical;
+}
+.stack-form {
+  display: grid;
+  gap: 14px;
+}
+.stack-form > label,
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  color: #c8c8c8;
+}
+.field-label {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #c8c8c8;
+}
+.field-hint,
+.composer-hint {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a3a3a3;
+}
+.field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.field-actions .save,
+.inline-add .save,
+.login-form .save,
+.composer-submit {
+  margin: 0;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #4a4a4a;
+  border-radius: 8px;
+  background: #2a2a2a;
+  color: var(--text);
+  font-size: 13px;
+}
+.btn:hover {
+  background: #343434;
+}
+.btn-danger {
+  color: #f0b2ac;
+  border-color: #6a4542;
+  background: transparent;
+}
+.btn-danger:hover {
+  background: #3a2b2a;
+}
+.icon-button {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: #d0d0d0;
+  line-height: 1;
+}
+.icon-button:hover {
+  background: #3a3a3a;
+}
+.search {
+  gap: 2px;
+  min-height: 44px;
+  padding: 0 4px 0 12px;
+  border: 1px solid #454545;
+  border-radius: 10px;
+  background: #242424;
+}
+.search input {
+  height: 40px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+}
+.search .search-icon {
+  font-size: 16px;
+  padding: 0;
+  color: #bdbdbd;
+  line-height: 1;
+}
+.search:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.search input:focus-visible {
+  outline: none;
+}
+.toolbar select.control {
+  width: auto;
+  min-width: 7.5rem;
+  max-width: 9.5rem;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 13px;
+  background: #2a2a2a;
+}
+.composer-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.composer #add-form,
+.composer #add-form.add-memo,
+.composer #add-form.add-table {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  align-items: center;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid #454545;
+  border-radius: 10px;
+  background: #2c2c2c;
+}
+.composer #new-task,
+.composer textarea {
+  height: 44px;
+  min-height: 44px;
+  max-height: 44px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 16px;
+  line-height: 24px;
+  resize: none;
+  overflow: auto;
+}
+.composer #add-form:focus-within {
+  border-color: color-mix(in srgb, var(--entry-color) 60%, #454545);
+  outline: 2px solid var(--entry-color);
+  outline-offset: 2px;
+  background: #303030;
+}
+.composer #add-form input:focus-visible,
+.composer #add-form textarea:focus-visible {
+  outline: none;
+}
+.composer-submit {
+  flex: 0 0 76px;
+  background: var(--entry-color);
+  color: #171717;
+  font-size: 14px;
+}
+.composer-submit:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.composer-hint {
+  margin-top: 8px;
+}
+.composer .cell-inputs {
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
+.composer .cell-input {
+  flex: 1 0 132px;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  background: #242424;
+  border: 1px solid #4a4a4a;
+  border-radius: 8px;
+}
+.composer .cell-input input {
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  padding: 8px 4px 8px 10px;
+  border: 0;
+  background: transparent;
   font-size: 16px;
 }
-.composer #add-form.add-task {
-  padding: 0 18px;
+.composer .cell-input:focus-within {
+  border-color: var(--entry-color);
+  outline: 2px solid var(--entry-color);
+  outline-offset: 1px;
+}
+.composer #add-form.add-table:focus-within {
+  outline: none;
+}
+.composer .remove-column,
+.edit-cells .remove-column {
+  width: 32px;
+  height: 32px;
+  margin: 0 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c8c8c8;
+  font-size: 16px;
+}
+.composer .add-column {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  align-self: center;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed #6d857c;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--table-accent);
+  font-size: 20px;
+}
+.edit-cells {
+  gap: 12px;
+  margin-top: 0;
+}
+.edit-cells .cell-input {
+  gap: 6px;
+}
+.edit-cells .cell-heading {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #cfcfcf;
+  font-size: 12px;
+}
+.edit-cells .cell-input .control {
+  height: auto;
+  padding: 9px 12px;
+}
+.edit-cells .add-column {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  flex: none;
+  align-self: stretch;
+  margin-top: 4px;
+  padding: 0 12px;
+  border: 1px dashed #6d857c;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--table-accent);
+  font-size: 13px;
+}
+.detail-action {
+  min-height: 44px;
+  border: 1px solid #454545;
+  border-radius: 8px;
+  background: #2a2a2a;
+}
+.detail .field .control,
+.detail textarea.control,
+#server-form .control,
+.login-form .control,
+dialog .control,
+#step-form .control {
+  background: #1c1c1c;
+  border: 1px solid #4a4a4a;
+  color: var(--text);
+}
+#step-form.inline-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: inherit;
+}
+#step-form .control {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  font-size: 14px;
+}
+.detail #note.control {
+  min-height: 140px;
+}
+.detail.entry-memo #note.control {
+  min-height: 180px;
+}
+.detail-bottom .btn {
+  font-size: 13px;
+}
+.login-form {
+  width: min(420px, calc(100vw - 32px));
+  padding: 28px 24px;
+  background: #242424;
+  border: 1px solid #3b3b3b;
+  border-radius: 14px;
+}
+.login-form h1 {
+  font-size: 22px;
+  letter-spacing: 0;
+}
+.login-form label,
+.login-form p {
+  margin: 0;
+}
+.login-form .control {
+  display: block;
+  margin-top: 6px;
+}
+.login-form .save {
+  width: 100%;
+  margin-top: 4px;
+}
+.login-form .field-hint {
+  margin: 0;
+}
+dialog {
+  border-radius: 14px;
+  padding: 24px;
+}
+dialog .field-actions {
+  justify-content: flex-end;
+}
+dialog .control {
+  margin-top: 0;
+}
+input[type='date'].control {
+  color-scheme: dark;
+}
+@media (max-width: 1100px) {
+  .toolbar select.control {
+    width: auto;
+    min-width: 7rem;
+  }
+}
+@media (max-width: 800px) {
+  header {
+    flex-wrap: wrap;
+  }
+  .toolbar select.control {
+    width: 6.5rem;
+    min-width: 0;
+    max-width: 6.5rem;
+  }
+  .composer #add-form.add-table {
+    flex-wrap: nowrap;
+  }
+  .composer .cell-inputs {
+    flex-basis: auto;
+  }
+  .composer-submit {
+    flex-basis: 64px;
+    padding: 0 10px;
+  }
+  .composer .mode-switch button {
+    padding: 0 6px;
+    font-size: 16px;
+  }
+}
+.composer .mode-switch button[aria-pressed='true'] {
+  color: var(--entry-color);
+  background: color-mix(in srgb, var(--entry-color) 16%, #2a2a2a);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--entry-color) 70%, #3b3b3b);
+}
+.composer .mode-switch button[aria-pressed='false']:hover {
+  background: #333;
 }

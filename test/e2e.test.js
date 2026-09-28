@@ -14,9 +14,37 @@ test(
   { timeout: 30000 },
   async () => {
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'everyday-e2e-'));
+    const frontend = spawn(process.execPath, ['src/frontend.js'], {
+      cwd: root,
+      env: { ...process.env, HOST: '127.0.0.1', PORT: '0' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const frontendUrl = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        frontend.kill();
+        reject(Error('frontend timeout'));
+      }, 10000);
+      frontend.stdout.on('data', (part) => {
+        const match = String(part).match(/http:\/\/127\.0\.0\.1:\d+/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(match[0]);
+        }
+      });
+      frontend.once('error', reject);
+    });
     const child = spawn(process.execPath, ['server.js'], {
       cwd: root,
-      env: { ...process.env, PORT: '0', DATA_DIR: dataDir },
+      env: {
+        ...process.env,
+        HOST: '127.0.0.1',
+        PORT: '0',
+        DATA_DIR: dataDir,
+        AUTH_USERNAME: 'tester',
+        AUTH_PASSWORD: 'test-password-123',
+        SEED_DATA: 'false',
+        CORS_ORIGINS: frontendUrl,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let browser;
@@ -42,8 +70,12 @@ test(
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
-      await page.goto(base);
-      await page.getByRole('heading', { name: 'アイディア' }).waitFor();
+      await page.goto(frontendUrl);
+      await page.getByLabel('Backend URL').fill(base);
+      await page.getByLabel('ユーザー名').fill('tester');
+      await page.getByLabel('パスワード').fill('test-password-123');
+      await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+      await page.getByRole('heading', { name: 'タスク', exact: true }).waitFor();
       await page.getByRole('textbox', { name: '新しいタスク' }).fill('E2E テストのタスク');
       await page.getByRole('textbox', { name: '新しいタスク' }).press('Enter');
       const task = page.locator('article.task').filter({ hasText: 'E2E テストのタスク' });
@@ -54,7 +86,7 @@ test(
       await page.getByRole('button', { name: '今日の予定に追加' }).click();
       await task.getByRole('button', { name: '重要マークを切り替える' }).click();
       await page.reload();
-      await page.getByRole('heading', { name: 'アイディア' }).waitFor();
+      await page.getByRole('heading', { name: 'タスク', exact: true }).waitFor();
       await task.getByRole('button', { name: 'E2E テストのタスク' }).click();
       assert.equal(
         await page.getByRole('textbox', { name: 'メモ' }).inputValue(),
@@ -160,6 +192,11 @@ test(
       assert.deepEqual(errors, []);
     } finally {
       await browser?.close();
+      if (frontend.exitCode === null)
+        await new Promise((resolve) => {
+          frontend.once('exit', resolve);
+          frontend.kill();
+        });
       if (child.exitCode === null)
         await new Promise((resolve) => {
           child.once('exit', resolve);

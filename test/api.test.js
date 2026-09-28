@@ -8,11 +8,20 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 test('API lifecycle, validation, persistence and cascading deletion', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'everyday-test-'));
-  let child, base;
+  let child, base, token;
   async function start() {
     child = spawn(process.execPath, ['server.js'], {
       cwd: root,
-      env: { ...process.env, PORT: '0', DATA_DIR: dir },
+      env: {
+        ...process.env,
+        HOST: '127.0.0.1',
+        PORT: '0',
+        DATA_DIR: dir,
+        AUTH_USERNAME: 'tester',
+        AUTH_PASSWORD: 'test-password-123',
+        SEED_DATA: 'false',
+        CORS_ORIGINS: 'https://frontend.example',
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     base = await new Promise((resolve, reject) => {
@@ -28,6 +37,10 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
       });
       child.on('error', reject);
     });
+    assert.equal((await fetch(base + '/api/tasks')).status, 401);
+    token = (
+      await req('/auth/login', 'POST', { username: 'tester', password: 'test-password-123' })
+    ).token;
   }
   async function stop() {
     await new Promise((resolve) => {
@@ -38,7 +51,7 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
   async function req(p, method = 'GET', body, status = 200) {
     const r = await fetch(base + '/api' + p, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: body ? JSON.stringify(body) : undefined,
     });
     assert.equal(r.status, status);
@@ -46,6 +59,18 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
   }
   try {
     await start();
+    assert.deepEqual(await req('/tasks'), []);
+    assert.deepEqual(await req('/lists'), [{ id: 'inbox', name: 'タスク' }]);
+    await req('/auth/login', 'POST', { username: 'tester', password: 'incorrect' }, 401);
+    const preflight = await fetch(base + '/api/tasks', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://frontend.example',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://frontend.example');
     const l = await req('/lists', 'POST', { name: 'テスト' }, 201);
     const t = await req(
       '/tasks',
@@ -132,8 +157,9 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
       false,
     );
     const page = await fetch(base);
-    assert.equal(page.status, 200);
-    assert.match(await page.text(), /Everyday/);
+    assert.equal(page.status, 404);
+    await req('/auth/logout', 'POST', {});
+    await req('/tasks', 'GET', undefined, 401);
   } finally {
     if (child && child.exitCode === null) await stop();
     await rm(dir, { recursive: true, force: true });

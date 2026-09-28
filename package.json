@@ -8,7 +8,9 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
+    "dev": "node --env-file=.env --watch server.js",
+    "start:frontend": "node src/frontend.js",
+    "dev:frontend": "node --watch src/frontend.js",
     "test": "npm run test:unit && npm run test:api && npm run test:e2e",
     "test:unit": "node --test test/task-utils.test.js",
     "test:api": "node --test test/api.test.js",
