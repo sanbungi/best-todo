@@ -1,0 +1,23 @@
+{
+  "name": "everyday-todo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "npm run test:unit && npm run test:api && npm run test:e2e",
+    "test:unit": "node --test test/task-utils.test.js",
+    "test:api": "node --test test/api.test.js",
+    "test:e2e": "node --test test/e2e.test.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "prettier": "^3.9.9"
+  }
+}

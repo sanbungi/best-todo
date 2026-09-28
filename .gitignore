@@ -1,0 +1,10 @@
+data/
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+test-results/
+playwright-report/
+.DS_Store
+Thumbs.db
