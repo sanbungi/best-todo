@@ -20,6 +20,63 @@ npm run dev
 - `npm run start:frontend` / `npm run dev:frontend`: フロントエンド。環境変数は実行環境から設定。
 - フロントエンドへの接続先URLのビルド時埋め込みは不要。利用者がログイン時に指定します。
 
+## Android版（WebView）
+
+`android/` に既存の `public/` を表示するAndroidクライアントを追加しています。バックエンドは内蔵せず、Web版と同じAPIへログインします。同じバックエンドならタスクも共有されます。
+
+- 画面の正は引き続き `public/` です。Androidビルド時に `android/app/src/main/assets/public` へコピーします。
+- アプリ内のフロントエンドOriginは `https://todo.local` です。バックエンドの `CORS_ORIGINS` にこのOriginを追加してください。
+- Android側は `usesCleartextTraffic=false`、WebViewもmixed content禁止です。本番バックエンドはHTTPSで指定してください。
+
+```sh
+# Android SDK / Gradle がある環境で実行
+cd android
+gradle :app:assembleDebug
+```
+
+Android Studioで `android/` を開いてビルドすることもできます。初回はAndroid Gradle Plugin等のダウンロードにネット接続が必要です。
+
+## Windowsデスクトップ版（Electron）
+
+既存の `public/` をそのまま表示するWindowsクライアントです。バックエンドは内蔵せず、Web版と同じAPIへログインします。同じバックエンドならタスクも共有されます。
+
+```sh
+npm ci
+npm run desktop
+# UIを編集すると自動で再読み込みする開発モード
+npm run dev:desktop
+```
+
+バックエンドの `CORS_ORIGINS` に **`http://127.0.0.1:17880`** を追加して再起動してください。Web版も使う場合はカンマで併記します。
+
+```text
+CORS_ORIGINS=https://todo.example.com,http://127.0.0.1:17880
+```
+
+ローカルAPIを使う場合は別ターミナルで `npm run dev` を起動し、デスクトップのログイン画面で `http://127.0.0.1:3000` と `.env` の認証情報を入力します。リモートAPIへはHTTPSを使用してください。
+
+### 画面変更の反映
+
+- **画面の正は `public/`**。Electron専用のHTML/CSS/画面ロジックはありません。
+- Web版とElectron版で `src/frontend-server.js` の静的配信処理も共用。`public/`内のサブディレクトリや画像も配信できます。
+- `dev:desktop` では `public/` の保存で自動再読み込み（未保存の入力は失われます）。Electron本体や配信処理を変更した場合は再起動します。
+- 配布版にはビルド時点の `public/` を同梱。画面更新の配布には再ビルド・再インストールが必要です。Webサイトの更新を遠隔で取り込む機能や自動アップデートは実装していません。
+
+### Windows用ビルド
+
+Windows上で実行します（x64）。初回はElectron・NSIS等のダウンロードにネット接続が必要です。
+
+```sh
+npm run pack:desktop   # dist/win-unpacked/ に実行可能なフォルダを生成
+npm run build:desktop  # dist/ にNSISインストーラーを生成
+npm run test:frontend # 共通の静的配信テスト
+npm run test:desktop  # 実際のElectron起動テスト（GUI環境が必要）
+```
+
+コード署名は未設定なので、配布先ではSmartScreenの警告が出ることがあります。`data/`、`.env`、APIサーバーは同梱しません。SQLiteは引き続きバックエンドで管理されます。認証トークンはWeb版と同じsessionStorageで、アプリ終了後は再ログインします。
+
+Electronはループバックの固定ポート17880だけで画面を配信します。ポート競合時はエラーを表示して終了し、既存のサーバーは読み込みません。多重起動は既存ウィンドウを表示します。Node.js連携は無効・sandbox/contextIsolationは有効、外部ページへの移動・新規ウィンドウ・権限要求は禁止しています。メニューはAltで表示できます。
+
 ## 環境変数
 
 | 対象    | 名前            | 内容                                                                                                                         |

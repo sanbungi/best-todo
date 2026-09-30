@@ -2,7 +2,14 @@ import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { login, authorize, logout } from './auth.js';
+import {
+  login,
+  authorize,
+  logout,
+  sessionSettings,
+  setSessionTtlHours,
+  revokeSessions,
+} from './auth.js';
 import { seed } from './seed.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -18,7 +25,11 @@ CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, listId TEXT NOT NULL REFE
 title TEXT NOT NULL, completed INTEGER NOT NULL DEFAULT 0, important INTEGER NOT NULL DEFAULT 0,
 myDay TEXT NOT NULL DEFAULT '', dueDate TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
 steps TEXT NOT NULL DEFAULT '[]', createdAt TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
+const envSessionHours = process.env.AUTH_SESSION_TTL_HOURS || '24';
+db.prepare('INSERT OR IGNORE INTO settings VALUES (?, ?)').run('sessionTtlHours', envSessionHours);
+setSessionTtlHours(db.prepare('SELECT value FROM settings WHERE key=?').get('sessionTtlHours').value);
 // Additive migration keeps all existing tasks and notes intact.
 const columns = db
   .prepare('PRAGMA table_info(tasks)')
@@ -76,11 +87,11 @@ function date(value) {
     fail(400, '日付が不正です');
   return value;
 }
-async function body(req) {
+async function body(req, maxBytes = 100000) {
   let data = '';
   for await (const part of req) {
     data += part;
-    if (Buffer.byteLength(data) > 100000) fail(413, 'データが大きすぎます');
+    if (Buffer.byteLength(data) > maxBytes) fail(413, 'データが大きすぎます');
   }
   try {
     const v = JSON.parse(data);
@@ -127,6 +138,109 @@ export const server = http.createServer(async (req, res) => {
       if (p === '/api/auth/logout' && method === 'POST') {
         logout(token);
         return send(200, { loggedOut: true });
+      }
+      if (p === '/api/auth/session' && method === 'GET') return send(200, sessionSettings(token));
+      if (p === '/api/auth/session' && method === 'PATCH') {
+        const b = await body(req);
+        const hours = Number(b.sessionTtlHours);
+        if (!Number.isFinite(hours) || hours < 1 || hours > 24 * 365)
+          fail(400, 'ログイン維持時間は1〜8760時間で指定してください');
+        db.prepare('INSERT OR REPLACE INTO settings VALUES (?, ?)').run(
+          'sessionTtlHours',
+          String(hours),
+        );
+        return send(200, setSessionTtlHours(hours));
+      }
+      if (p === '/api/auth/sessions/revoke' && method === 'POST')
+        return send(200, revokeSessions(token));
+      if (p === '/api/import' && method === 'POST') {
+        const b = await body(req, 10000000);
+        if (!Array.isArray(b.items) || !b.items.length || b.items.length > 10000)
+          fail(400, '1〜10000件の項目を指定してください');
+        const items = b.items.map((item, i) => {
+          try {
+            if (!item || typeof item !== 'object') fail(400, '項目が不正です');
+            const list = cleanText(item.list, 'リスト名', 100);
+            const kind = entryKind(item.kind);
+            const cells = entryCells(item.cells, kind);
+            const note = cleanText(item.note, 'メモ', 10000, kind !== 'memo');
+            const title =
+              kind === 'memo'
+                ? note.slice(0, 500)
+                : kind === 'table'
+                  ? cells.filter(Boolean).join(' | ').slice(0, 500)
+                  : cleanText(item.title, 'タスク名');
+            if (
+              typeof item.completed !== 'boolean' ||
+              typeof item.important !== 'boolean' ||
+              (kind !== 'task' && item.completed)
+            )
+              fail(400, '完了・重要の値が不正です');
+            if (!Array.isArray(item.steps) || item.steps.length > 100)
+              fail(400, 'ステップが不正です');
+            const steps = item.steps.map((s) => {
+              if (!s || typeof s.completed !== 'boolean') fail(400, 'ステップが不正です');
+              return {
+                id: randomUUID(),
+                title: cleanText(s.title, 'ステップ'),
+                completed: s.completed,
+              };
+            });
+            return {
+              ...item,
+              list,
+              kind,
+              cells,
+              note,
+              title,
+              steps,
+              myDay: date(item.myDay),
+              dueDate: date(item.dueDate),
+            };
+          } catch (e) {
+            fail(400, `${i + 2}行目: ${e.message}`);
+          }
+        });
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const lists = new Map(
+            db
+              .prepare('SELECT * FROM lists ORDER BY rowid')
+              .all()
+              .map((l) => [l.name, l.id]),
+          );
+          let order = db.prepare('SELECT COALESCE(MAX(sortOrder),0) AS n FROM tasks').get().n;
+          const insert = db.prepare(
+            'INSERT INTO tasks (id,listId,title,note,kind,cells,steps,completed,important,myDay,dueDate,createdAt,sortOrder) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+          );
+          for (const item of items) {
+            if (!lists.has(item.list)) {
+              const id = randomUUID();
+              db.prepare('INSERT INTO lists VALUES (?,?)').run(id, item.list);
+              lists.set(item.list, id);
+            }
+            insert.run(
+              randomUUID(),
+              lists.get(item.list),
+              item.title,
+              item.note,
+              item.kind,
+              JSON.stringify(item.cells),
+              JSON.stringify(item.steps),
+              +item.completed,
+              +item.important,
+              item.myDay,
+              item.dueDate,
+              new Date().toISOString(),
+              ++order,
+            );
+          }
+          db.exec('COMMIT');
+        } catch (e) {
+          db.exec('ROLLBACK');
+          throw e;
+        }
+        return send(201, { imported: items.length });
       }
       if (p === '/api/lists' && method === 'GET')
         return send(200, db.prepare('SELECT * FROM lists ORDER BY rowid').all());

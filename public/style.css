@@ -208,6 +208,10 @@ textarea:focus-visible {
 .server-tab.active {
   background: #383838;
 }
+.server-main {
+  gap: 18px;
+  overflow: auto;
+}
 .server-panel {
   max-width: 620px;
   background: #242424;

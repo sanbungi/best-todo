@@ -1,0 +1,23 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.everydaytodo.android'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.everydaytodo.android'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+}
+
+tasks.register('syncFrontendAssets', Copy) {
+    from('../../public')
+    into('src/main/assets/public')
+}
+
+preBuild.dependsOn(syncFrontendAssets)

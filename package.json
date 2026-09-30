@@ -2,16 +2,55 @@
   "name": "everyday-todo",
   "version": "1.0.0",
   "private": true,
+  "description": "日本語のTo Doデスクトップクライアント",
+  "author": "Everyday To Do contributors",
+  "main": "electron/main.js",
+  "build": {
+    "appId": "com.everydaytodo.desktop",
+    "productName": "Everyday To Do",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**",
+      "public/**",
+      "src/frontend-server.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "start": "node server.js",
+    "desktop": "electron .",
+    "dev:desktop": "electron . --dev",
+    "pack:desktop": "electron-builder --win --dir",
+    "build:desktop": "electron-builder --win",
+    "test:desktop": "node --test test/desktop.test.js",
+    "test:frontend": "node --test test/frontend.test.js",
     "dev": "node --env-file=.env --watch server.js",
     "start:frontend": "node src/frontend.js",
     "dev:frontend": "node --watch src/frontend.js",
-    "test": "npm run test:unit && npm run test:api && npm run test:e2e",
+    "test": "npm run test:unit && npm run test:frontend && npm run test:api && npm run test:e2e",
     "test:unit": "node --test test/task-utils.test.js",
     "test:api": "node --test test/api.test.js",
     "test:e2e": "node --test test/e2e.test.js",
@@ -19,6 +58,8 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "playwright": "^1.63.0",
     "prettier": "^3.9.9"
   }

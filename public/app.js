@@ -1,3 +1,4 @@
+import { exportCsv, importCsv } from './csv.js';
 import { bindReordering } from './reorder.js';
 import { escapeHtml as esc, today, tasksForView, visibleTasks } from './task-utils.js';
 const $ = (s) => document.querySelector(s);
@@ -24,9 +25,36 @@ const state = {
   mode: 'task',
   drafts: { task: '', memo: '', cells: ['', ''] },
   saving: false,
+  sessionSettings: null,
+  loadingSessionSettings: false,
 };
-let backend = sessionStorage.getItem('backend') || '';
-let token = sessionStorage.getItem('token') || '';
+const authStorageKey = 'backendLogin';
+function savedLogin() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(authStorageKey) || '{}');
+    if (saved.backend && saved.token && (!saved.expiresAt || Date.parse(saved.expiresAt) > Date.now()))
+      return saved;
+    localStorage.removeItem(authStorageKey);
+  } catch {
+    localStorage.removeItem(authStorageKey);
+  }
+  return {
+    backend: sessionStorage.getItem('backend') || '',
+    token: sessionStorage.getItem('token') || '',
+  };
+}
+const initialLogin = savedLogin();
+let backend = initialLogin.backend || '';
+let token = initialLogin.token || '';
+function saveLogin(expiresAt) {
+  localStorage.setItem(authStorageKey, JSON.stringify({ backend, token, expiresAt }));
+  sessionStorage.setItem('backend', backend);
+  sessionStorage.setItem('token', token);
+}
+function clearLogin() {
+  localStorage.removeItem(authStorageKey);
+  sessionStorage.removeItem('token');
+}
 const serverProfileKey = () => 'serverProfile:' + backend;
 function backendOrigin() {
   try {
@@ -63,15 +91,16 @@ function serverProfile() {
 }
 function showLogin() {
   token = '';
-  sessionStorage.removeItem('token');
+  clearLogin();
   state.lists = [];
   state.tasks = [];
   state.selected = null;
   state.view = 'inbox';
   state.query = '';
   state.drafts = { task: '', memo: '', cells: ['', ''] };
+  state.sessionSettings = null;
   $('#app').innerHTML =
-    `<form id="login-form" class="login-form stack-form"><h1>バックエンドにログイン</h1><label>Backend URL<input class="control" name="backend" type="url" inputmode="url" placeholder="https://api.example.com" value="${esc(backend)}" required autocomplete="url"></label><label>ユーザー名<input class="control" name="username" autocomplete="username" required></label><label>パスワード<input class="control" name="password" type="password" autocomplete="current-password" required></label><button class="save" type="submit">ログイン</button><p class="field-hint">接続先のオリジンだけを入力してください。認証情報はそのサーバーへ送信されます。</p></form>`;
+    `<form id="login-form" class="login-form stack-form"><h1>バックエンドにログイン</h1><label>Backend URL<input class="control" name="backend" type="url" inputmode="url" placeholder="https://api.example.com" value="${esc(backend)}" required autocomplete="url"></label><label>ユーザー名<input class="control" name="username" autocomplete="username" required></label><label>パスワード<input class="control" name="password" type="password" autocomplete="current-password" required></label><button class="save" type="submit">ログイン</button><p class="field-hint">接続先のオリジンだけを入力してください。ログイン状態は同じブラウザにセッション期限まで保存されます。</p></form>`;
   $('#login-form').onsubmit = (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -95,8 +124,7 @@ function showLogin() {
         password: values.get('password'),
       });
       token = result.token;
-      sessionStorage.setItem('backend', backend);
-      sessionStorage.setItem('token', token);
+      saveLogin(result.expiresAt);
       form.reset();
       await refresh();
     });
@@ -222,7 +250,11 @@ function detail(t) {
 }
 function serverSettings() {
   const profile = serverProfile();
-  return `<main class="server-main"><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>サーバー管理</h1><p>接続先ごとの表示名とロゴを設定します</p></div></div></header><section class="server-panel"><div class="server-preview"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><form id="server-form" class="stack-form"><label>ワークスペース名<input class="control" name="name" maxlength="80" value="${esc(profile.name)}" required autocomplete="organization"></label><label>ロゴ文字<input class="control" name="logo" maxlength="2" value="${esc(profile.logo)}" required autocapitalize="characters"></label><label>接続先<input class="control" value="${esc(backendOrigin())}" readonly></label><div class="field-actions"><button class="save" type="submit">保存</button><button type="button" class="btn" data-reset-server>接続先から自動設定</button><button type="button" class="btn btn-danger" data-change-server>接続先を変更</button></div></form></section></main>`;
+  const session = state.sessionSettings;
+  const expires = session?.currentSessionExpiresAt
+    ? new Date(session.currentSessionExpiresAt).toLocaleString('ja-JP')
+    : '取得中…';
+  return `<main class="server-main"><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>サーバー管理</h1><p>接続先、ログインセッション、CSVを管理します</p></div></div></header><section class="server-panel"><div class="server-preview"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><form id="server-form" class="stack-form"><label>ワークスペース名<input class="control" name="name" maxlength="80" value="${esc(profile.name)}" required autocomplete="organization"></label><label>ロゴ文字<input class="control" name="logo" maxlength="2" value="${esc(profile.logo)}" required autocapitalize="characters"></label><label>接続先<input class="control" value="${esc(backendOrigin())}" readonly></label><div class="field-actions"><button class="save" type="submit">保存</button><button type="button" class="btn" data-reset-server>接続先から自動設定</button><button type="button" class="btn btn-danger" data-change-server>接続先を変更</button></div></form></section><section class="server-panel"><h2>ログインセッション</h2><p class="field-hint">ログイン状態を維持する時間を設定します。変更後の新しいログインから適用されます。</p><div class="server-preview"><div><strong>${session ? `${session.activeSessions} セッション` : '取得中…'}</strong><small>現在のセッション期限: ${esc(expires)}</small></div></div><form id="session-form" class="stack-form"><label>ログイン維持時間（時間）<input class="control" name="sessionTtlHours" type="number" min="1" max="8760" step="1" value="${esc(String(session?.sessionTtlHours ?? 24))}" required></label><div class="field-actions"><button class="save" type="submit">セッション設定を保存</button><button type="button" class="btn btn-danger" data-revoke-sessions>他のセッションをログアウト</button></div></form></section><section class="server-panel"><h2>CSV 一括インポート／エクスポート</h2><p class="field-hint">全リストのタスク・メモ・表をUTF-8 CSVで保存します。インポートは追加のみ（再取込すると重複）。同名リストに追加し、存在しないリストは作成します。空のリストは対象外です。</p><button type="button" class="btn" data-export-csv>CSVをエクスポート</button><form id="csv-form" class="stack-form"><label>CSVファイル（UTF-8・最大5MB）<input class="control" type="file" name="csv" accept=".csv,text/csv" required></label><p class="field-hint">エクスポートしたCSVのヘッダーを使用してください。completed / important はtrueまたはfalse、日付はYYYY-MM-DD、cells / steps はJSON形式です。</p><button class="save" type="submit">CSVをインポート</button></form></section></main>`;
 }
 function render() {
   const isServer = state.view === 'server';
@@ -254,6 +286,42 @@ function render() {
   bind();
 }
 function bind() {
+  if ($('#csv-form')) {
+    $('[data-export-csv]').onclick = () =>
+      run(async () => {
+        const [lists, tasks] = await Promise.all([api('/lists'), api('/tasks')]);
+        const url = URL.createObjectURL(
+          new Blob([exportCsv(lists, tasks)], { type: 'text/csv;charset=utf-8' }),
+        );
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `todo-${today()}.csv`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      });
+    $('#csv-form').onsubmit = (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button');
+      if (button.disabled) return;
+      button.disabled = true;
+      run(async () => {
+        try {
+          const file = form.elements.csv.files[0];
+          if (!file || file.size > 5000000) throw Error('5MB以下のCSVを選択してください');
+          const items = importCsv(await file.text());
+          if (!items.length) throw Error('インポートする項目がありません');
+          if (!confirm(`${items.length}件を追加します。既存の項目は変更しません。よろしいですか？`))
+            return;
+          const result = await api('/import', 'POST', { items });
+          await refresh();
+          toast(`${result.imported}件をインポートしました`);
+        } finally {
+          button.disabled = false;
+        }
+      });
+    };
+  }
   $('[data-logout]').onclick = () =>
     run(async () => {
       try {
@@ -298,10 +366,38 @@ function bind() {
       $('#search')?.focus();
     };
   if (state.view === 'server') {
+    if (!state.sessionSettings && !state.loadingSessionSettings) {
+      state.loadingSessionSettings = true;
+      run(async () => {
+        try {
+          state.sessionSettings = await api('/auth/session');
+        } finally {
+          state.loadingSessionSettings = false;
+          if (state.view === 'server') render();
+        }
+      });
+    }
     $('[data-mobile]').onclick = () => {
       state.mobile = !state.mobile;
       render();
     };
+    $('#session-form').onsubmit = (e) => {
+      e.preventDefault();
+      run(async () => {
+        state.sessionSettings = await api('/auth/session', 'PATCH', {
+          sessionTtlHours: Number(new FormData(e.currentTarget).get('sessionTtlHours')),
+        });
+        render();
+        toast('セッション設定を保存しました');
+      });
+    };
+    $('[data-revoke-sessions]').onclick = () =>
+      run(async () => {
+        if (!confirm('現在の端末以外のログインセッションをログアウトしますか？')) return;
+        state.sessionSettings = await api('/auth/sessions/revoke', 'POST', {});
+        render();
+        toast('他のセッションをログアウトしました');
+      });
     $('#server-form').onsubmit = (e) => {
       e.preventDefault();
       const values = new FormData(e.currentTarget);

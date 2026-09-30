@@ -7,7 +7,19 @@ if (!username || !password || password.length < 12)
 const salt = randomBytes(16);
 const passwordHash = scryptSync(password, salt, 64);
 const sessions = new Map();
+const DEFAULT_SESSION_TTL_HOURS = 24;
+const MAX_SESSION_TTL_HOURS = 24 * 365;
+let sessionTtlMs = sessionHoursToMs(process.env.AUTH_SESSION_TTL_HOURS ?? DEFAULT_SESSION_TTL_HOURS);
 const digest = (value) => createHash('sha256').update(value).digest();
+function sessionHoursToMs(value) {
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours < 1 || hours > MAX_SESSION_TTL_HOURS)
+    throw new Error('ログイン維持時間は1〜8760時間で指定してください');
+  return Math.round(hours * 60 * 60 * 1000);
+}
+function prune(now = Date.now()) {
+  for (const [key, expiry] of sessions) if (expiry <= now) sessions.delete(key);
+}
 let failures = 0;
 let blockedUntil = 0;
 export function login(name, secret) {
@@ -28,11 +40,12 @@ export function login(name, secret) {
     throw Object.assign(new Error('ユーザー名またはパスワードが違います'), { status: 401 });
   }
   failures = 0;
-  for (const [key, expiry] of sessions) if (expiry <= now) sessions.delete(key);
+  prune(now);
   if (sessions.size >= 100) sessions.delete(sessions.keys().next().value);
   const token = randomBytes(32).toString('hex');
-  sessions.set(token, now + 24 * 60 * 60 * 1000);
-  return { token, username };
+  const expiresAt = now + sessionTtlMs;
+  sessions.set(token, expiresAt);
+  return { token, username, expiresAt: new Date(expiresAt).toISOString() };
 }
 export function authorize(req) {
   const token = req.headers.authorization?.replace(/^Bearer /, '');
@@ -42,4 +55,20 @@ export function authorize(req) {
 }
 export function logout(token) {
   sessions.delete(token);
+}
+export function sessionSettings(token) {
+  prune();
+  return {
+    sessionTtlHours: sessionTtlMs / 60 / 60 / 1000,
+    activeSessions: sessions.size,
+    currentSessionExpiresAt: token && sessions.has(token) ? new Date(sessions.get(token)).toISOString() : null,
+  };
+}
+export function setSessionTtlHours(hours) {
+  sessionTtlMs = sessionHoursToMs(hours);
+  return sessionSettings();
+}
+export function revokeSessions(exceptToken) {
+  for (const key of sessions.keys()) if (key !== exceptToken) sessions.delete(key);
+  return sessionSettings(exceptToken);
 }
