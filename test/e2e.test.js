@@ -129,6 +129,32 @@ test(
         '再読み込みしても残る',
       );
       await page.getByRole('button', { name: '詳細を閉じる' }).click();
+      // IME pre-edit must keep the same focused input until composition is committed.
+      const search = page.getByRole('textbox', { name: 'タスクを検索' });
+      await search.focus();
+      await search.evaluate((input) => {
+        window.imeSearchInput = input;
+        input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        input.value = 'こんにち';
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true }));
+      });
+      assert.equal(
+        await search.evaluate(
+          (input) => input === window.imeSearchInput && document.activeElement === input,
+        ),
+        true,
+      );
+      assert.equal(await page.getByRole('heading', { name: '検索結果', exact: true }).count(), 0);
+      // Some browsers omit isComposing on an input event during composition.
+      await search.evaluate((input) => {
+        input.value = 'こんにちは';
+        input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      });
+      assert.equal(await search.evaluate((input) => input === window.imeSearchInput), true);
+      await search.dispatchEvent('compositionend', { data: 'こんにちは' });
+      await page.getByRole('heading', { name: '検索結果', exact: true }).waitFor();
+      assert.equal(await search.inputValue(), 'こんにちは');
+      assert.equal(await search.evaluate((input) => document.activeElement === input), true);
       await page.getByRole('textbox', { name: 'タスクを検索' }).fill('再読み込みしても残る');
       await page.getByRole('heading', { name: '検索結果' }).waitFor();
       await page.getByRole('button', { name: 'E2E テストのタスク' }).waitFor();

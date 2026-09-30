@@ -503,12 +503,26 @@ function bind() {
         render();
       }),
   );
-  $('#search').oninput = (e) => {
-    const pos = e.target.selectionStart;
-    state.query = e.target.value;
+  const search = $('#search');
+  let composingSearch = false;
+  const updateSearch = () => {
+    if (state.query === search.value) return;
+    const start = search.selectionStart;
+    const end = search.selectionEnd;
+    state.query = search.value;
     render();
     $('#search').focus();
-    $('#search').setSelectionRange(pos, pos);
+    $('#search').setSelectionRange(start, end);
+  };
+  search.addEventListener('compositionstart', () => {
+    composingSearch = true;
+  });
+  search.addEventListener('compositionend', () => {
+    composingSearch = false;
+    updateSearch();
+  });
+  search.oninput = (e) => {
+    if (!composingSearch && !e.isComposing) updateSearch();
   };
   if ($('[data-clear-search]'))
     $('[data-clear-search]').onclick = () => {
