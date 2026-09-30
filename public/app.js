@@ -32,7 +32,11 @@ const authStorageKey = 'backendLogin';
 function savedLogin() {
   try {
     const saved = JSON.parse(localStorage.getItem(authStorageKey) || '{}');
-    if (saved.backend && saved.token && (!saved.expiresAt || Date.parse(saved.expiresAt) > Date.now()))
+    if (
+      saved.backend &&
+      saved.token &&
+      (!saved.expiresAt || Date.parse(saved.expiresAt) > Date.now())
+    )
       return saved;
     localStorage.removeItem(authStorageKey);
   } catch {
@@ -163,6 +167,8 @@ async function run(fn) {
 }
 async function refresh() {
   [state.lists, state.tasks] = await Promise.all([api('/lists'), api('/tasks')]);
+  if (state.view !== 'server' && !state.lists.some((l) => l.id === state.view))
+    state.view = state.lists[0]?.id || 'server';
   render();
 }
 async function patch(id, data) {
@@ -173,15 +179,10 @@ async function patch(id, data) {
 function filter(view) {
   return tasksForView(state.tasks, view);
 }
-const smart = [
-  ['today', 'sun', '今日の予定'],
-  ['important', 'star', '重要'],
-  ['planned', 'calendar', '今後の予定'],
-  ['inbox', 'home', 'タスク'],
-];
-function nav(id, icon, name) {
+function nav(list) {
+  const { id, name, icon } = list;
   const n = filter(id).filter((t) => !t.completed).length;
-  return `<button class="nav ${state.view === id && !state.query ? 'active' : ''}" data-view="${id}"><span class="nav-icon ${icon}">${icons[icon]}</span><span>${esc(name)}</span>${n ? `<small>${n}</small>` : ''}</button>`;
+  return `<div class="list-nav"><button class="nav ${state.view === id && !state.query ? 'active' : ''}" data-view="${id}" data-list-id="${id}" aria-haspopup="menu"><span class="nav-icon">${esc(icon)}</span><span>${esc(name)}</span>${n ? `<small>${n}</small>` : ''}</button><button class="list-options" data-list-options="${id}" aria-label="${esc(name)}のメニュー" aria-haspopup="menu">•••</button></div>`;
 }
 const modes = {
   task: { name: 'タスク', icon: '✓' },
@@ -260,9 +261,7 @@ function render() {
   const isServer = state.view === 'server';
   const title = state.query
     ? '検索結果'
-    : smart.find((x) => x[0] === state.view)?.[2] ||
-      state.lists.find((l) => l.id === state.view)?.name ||
-      'タスク';
+    : state.lists.find((l) => l.id === state.view)?.name || 'タスク';
   const { active, done } = isServer
     ? { active: [], done: [] }
     : visibleTasks(state.tasks, {
@@ -274,18 +273,170 @@ function render() {
   const profile = serverProfile();
   const mainHtml = isServer
     ? serverSettings()
-    : `<main><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>${esc(title)}</h1><p>${state.query ? `「${esc(state.query)}」の検索結果` : `${active.length} 件の項目${state.view === 'today' ? ' · ' + new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' }) : ''}`}</p></div></div><div class="toolbar"><label class="toolbar-sort"><span class="sr-only">並び替え</span><select id="sort" class="control"><option value="manual">手動順</option><option value="created">追加順</option><option value="important">重要度順</option><option value="due">期限順</option><option value="title">名前順</option></select></label><button type="button" class="icon-button" data-menu aria-label="リストメニュー">•••</button>${state.menu ? `<div class="menu"><button type="button" data-toggle-done>${state.showDone ? '完了済みを隠す' : '完了済みを表示'}</button>${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" data-rename>リスト名を変更</button>' : ''}${!state.query && state.view !== 'inbox' && state.lists.some((l) => l.id === state.view) ? '<button type="button" class="danger" data-delete-list>リストを削除</button>' : ''}</div>` : ''}</div></header><section class="task-list" aria-label="タスク一覧">${active.map(row).join('')}${!active.length && !done.length ? '<div class="empty"><p>項目がありません</p></div>' : ''}${done.length ? `<button class="completed-toggle" data-toggle-done>${state.showDone ? '⌄' : '›'} 完了済み <small>${done.length}</small></button>${state.showDone ? done.map(row).join('') : ''}` : ''}</section>${composer()}</main>`;
+    : `<main><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>${esc(title)}</h1><p>${state.query ? `「${esc(state.query)}」の検索結果` : `${active.length} 件の項目${state.view === 'today' ? ' · ' + new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' }) : ''}`}</p></div></div><div class="toolbar"><label class="toolbar-sort"><span class="sr-only">並び替え</span><select id="sort" class="control"><option value="manual">手動順</option><option value="created">追加順</option><option value="important">重要度順</option><option value="due">期限順</option><option value="title">名前順</option></select></label><button type="button" class="icon-button" data-menu aria-label="リストメニュー">•••</button>${state.menu ? `<div class="menu"><button type="button" data-toggle-done>${state.showDone ? '完了済みを隠す' : '完了済みを表示'}</button>${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" data-rename>リスト名を変更</button>' : ''}${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" class="danger" data-delete-list>リストを削除</button>' : ''}</div>` : ''}</div></header><section class="task-list" aria-label="タスク一覧">${active.map(row).join('')}${!active.length && !done.length ? '<div class="empty"><p>項目がありません</p></div>' : ''}${done.length ? `<button class="completed-toggle" data-toggle-done>${state.showDone ? '⌄' : '›'} 完了済み <small>${done.length}</small></button>${state.showDone ? done.map(row).join('') : ''}` : ''}</section>${composer()}</main>`;
   $('#app').innerHTML =
-    `<aside class="sidebar ${state.mobile ? 'mobile-open' : ''}"><div class="brand"><span>✓</span> EVERYDAY <small>TO DO</small></div><div class="profile"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><div class="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" aria-label="タスクを検索" placeholder="タスク、メモ、表を検索" value="${esc(state.query)}" autocomplete="off" enterkeyhint="search">${state.query ? '<button type="button" class="icon-button" data-clear-search aria-label="検索をクリア">×</button>' : ''}</div><nav>${smart.map((v) => nav(...v)).join('')}<div class="divider"></div><div class="list-caption">マイリスト <span>${state.lists.length - 1}</span></div>${state.lists
-      .filter((l) => l.id !== 'inbox')
-      .map((l) => nav(l.id, 'list', l.name))
+    `<aside class="sidebar ${state.mobile ? 'mobile-open' : ''}"><div class="brand"><span>✓</span> EVERYDAY <small>TO DO</small></div><div class="profile"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><div class="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" aria-label="タスクを検索" placeholder="タスク、メモ、表を検索" value="${esc(state.query)}" autocomplete="off" enterkeyhint="search">${state.query ? '<button type="button" class="icon-button" data-clear-search aria-label="検索をクリア">×</button>' : ''}</div><nav>${
+      state.lists.some((l) => l.pinned)
+        ? `<div class="list-caption">ピン留め</div>${state.lists
+            .filter((l) => l.pinned)
+            .map(nav)
+            .join('')}<div class="divider"></div>`
+        : ''
+    }<div class="list-caption">マイリスト <span>${state.lists.filter((l) => !l.pinned).length}</span></div>${state.lists
+      .filter((l) => !l.pinned)
+      .map(nav)
       .join(
         '',
       )}</nav><button class="new-list" data-new-list>＋ <span>新しいリスト</span></button><button class="server-tab ${isServer ? 'active' : ''}" data-view="server"><span class="nav-icon server">${icons.server}</span><span>サーバー管理</span></button><div class="local-status" title="${esc(backend)}">バックエンドに保存 <button type="button" data-logout>ログアウト</button></div></aside>${mainHtml}${selected ? detail(selected) : ''}<dialog id="list-dialog"><form id="list-form" class="stack-form"><h2 id="dialog-title"></h2><label for="list-name">リスト名</label><input id="list-name" class="control" name="name" maxlength="100" required autocomplete="off"><div class="field-actions"><button type="button" class="btn" data-cancel>キャンセル</button><button class="save" type="submit">保存</button></div></form></dialog>`;
   if ($('#sort')) $('#sort').value = state.sort;
   bind();
 }
+function listDialog(list = null, appearance = false) {
+  const d = $('#list-dialog');
+  const form = $('#list-form');
+  $('#dialog-title').textContent = appearance
+    ? 'アイコンと色'
+    : list
+      ? 'リスト名を変更'
+      : '新しいリスト';
+  $('#list-name').value = list?.name || '';
+  form.querySelector('.appearance-fields')?.remove();
+  if (appearance) {
+    const fields = document.createElement('div');
+    fields.className = 'appearance-fields';
+    fields.innerHTML = `<label>アイコン<input class="control" name="icon" maxlength="8" required value="${esc(list.icon)}" aria-label="アイコン（絵文字や記号）"></label><div class="icon-presets">${['☰', '★', '♥', '●', '☀', '✓', '🏠', '💼', '🛒', '📚', '🎯', '✈️'].map((icon) => `<button type="button" class="btn" data-icon="${icon}" aria-label="${icon}">${icon}</button>`).join('')}</div><label>色<input type="color" name="color" value="${esc(list.color)}"></label>`;
+    form.insertBefore(fields, form.querySelector('.field-actions'));
+    fields.querySelectorAll('[data-icon]').forEach(
+      (b) =>
+        (b.onclick = () => {
+          form.elements.icon.value = b.dataset.icon;
+        }),
+    );
+  }
+  d.showModal();
+  $('#list-name').focus();
+  $('[data-cancel]').onclick = () => d.close();
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    const data = { name: $('#list-name').value };
+    if (appearance)
+      Object.assign(data, { icon: form.elements.icon.value, color: form.elements.color.value });
+    const save = form.querySelector('[type="submit"]');
+    save.disabled = true;
+    run(async () => {
+      try {
+        const result = await api(
+          '/lists' + (list ? '/' + list.id : ''),
+          list ? 'PATCH' : 'POST',
+          data,
+        );
+        if (!list) {
+          state.view = result.id;
+          state.query = '';
+        }
+        state.menu = false;
+        d.close();
+        await refresh();
+      } finally {
+        save.disabled = false;
+      }
+    });
+  };
+}
+function deleteList(list) {
+  if (!confirm(`「${list.name}」とすべての項目を削除しますか？`)) return;
+  run(async () => {
+    await api('/lists/' + list.id, 'DELETE');
+    state.selected = null;
+    state.menu = false;
+    await refresh();
+  });
+}
+let closeListMenu = () => {};
+function openListMenu(event, id) {
+  event.preventDefault();
+  closeListMenu();
+  const list = state.lists.find((l) => l.id === id);
+  const trigger = event.currentTarget;
+  const menu = document.createElement('div');
+  menu.className = 'menu list-context-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML = `<button role="menuitem" data-action="pin">${list.pinned ? 'ピン留めを解除' : 'ピン留め'}</button><button role="menuitem" data-action="appearance">アイコンと色を設定</button><button role="menuitem" data-action="rename">リネーム</button><button role="menuitem" class="danger" data-action="delete">削除</button>`;
+  document.body.append(menu);
+  const rect = trigger.getBoundingClientRect();
+  menu.style.left =
+    Math.max(8, Math.min(event.clientX || rect.left, innerWidth - menu.offsetWidth - 8)) + 'px';
+  menu.style.top =
+    Math.max(8, Math.min(event.clientY || rect.bottom, innerHeight - menu.offsetHeight - 8)) + 'px';
+  const outside = (e) => {
+    if (!menu.contains(e.target)) closeListMenu();
+  };
+  const keydown = (e) => {
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      closeListMenu();
+      trigger.focus();
+    }
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault();
+      const buttons = [...menu.querySelectorAll('button')];
+      const index = buttons.indexOf(document.activeElement);
+      buttons[
+        e.key === 'Home'
+          ? 0
+          : e.key === 'End'
+            ? buttons.length - 1
+            : (index + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
+      ].focus();
+    }
+  };
+  closeListMenu = () => {
+    menu.remove();
+    document.removeEventListener('pointerdown', outside);
+    document.removeEventListener('keydown', keydown);
+    window.removeEventListener('resize', closeListMenu);
+  };
+  document.addEventListener('pointerdown', outside);
+  document.addEventListener('keydown', keydown);
+  window.addEventListener('resize', closeListMenu);
+  menu.onclick = (e) => {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    if (!action) return;
+    closeListMenu();
+    trigger.focus();
+    if (action === 'pin')
+      run(async () => {
+        await api('/lists/' + id, 'PATCH', { pinned: !list.pinned });
+        await refresh();
+      });
+    if (action === 'appearance' || action === 'rename') listDialog(list, action === 'appearance');
+    if (action === 'delete') deleteList(list);
+  };
+  menu.querySelector('button').focus();
+}
+function bindListMenus() {
+  closeListMenu();
+  $('[data-new-list]').onclick = () => listDialog();
+  if ($('[data-rename]'))
+    $('[data-rename]').onclick = () => listDialog(state.lists.find((l) => l.id === state.view));
+  if ($('[data-delete-list]'))
+    $('[data-delete-list]').onclick = () =>
+      deleteList(state.lists.find((l) => l.id === state.view));
+  document.querySelectorAll('[data-list-id]').forEach((b) => {
+    b.querySelector('.nav-icon').style.color = state.lists.find(
+      (l) => l.id === b.dataset.listId,
+    ).color;
+    b.oncontextmenu = (e) => openListMenu(e, b.dataset.listId);
+    b.onkeydown = (e) => {
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))
+        openListMenu(e, b.dataset.listId);
+    };
+  });
+  document
+    .querySelectorAll('[data-list-options]')
+    .forEach((b) => (b.onclick = (e) => openListMenu(e, b.dataset.listOptions)));
+}
 function bind() {
+  bindListMenus();
   if ($('#csv-form')) {
     $('[data-export-csv]').onclick = () =>
       run(async () => {
@@ -577,41 +728,6 @@ function bind() {
       }
     });
   };
-  const listDialog = (rename = false) => {
-    state.menu = false;
-    const d = $('#list-dialog');
-    $('#dialog-title').textContent = rename ? 'リスト名を変更' : '新しいリスト';
-    $('#list-name').value = rename ? state.lists.find((l) => l.id === state.view).name : '';
-    d.showModal();
-    $('#list-name').focus();
-    $('#list-form').onsubmit = (e) => {
-      e.preventDefault();
-      run(async () => {
-        const result = await api(
-          '/lists' + (rename ? '/' + state.view : ''),
-          rename ? 'PATCH' : 'POST',
-          { name: $('#list-name').value },
-        );
-        state.view = result.id;
-        state.query = '';
-        await refresh();
-      });
-    };
-    $('[data-cancel]').onclick = () => d.close();
-  };
-  $('[data-new-list]').onclick = () => listDialog();
-  if ($('[data-rename]')) $('[data-rename]').onclick = () => listDialog(true);
-  if ($('[data-delete-list]'))
-    $('[data-delete-list]').onclick = () => {
-      if (confirm('このリストとすべてのタスクを削除しますか？'))
-        run(async () => {
-          await api('/lists/' + state.view, 'DELETE');
-          state.view = 'inbox';
-          state.selected = null;
-          state.menu = false;
-          await refresh();
-        });
-    };
   const t = state.tasks.find((t) => t.id === state.selected);
   if (!t) return;
   $('[data-close]').onclick = () => {

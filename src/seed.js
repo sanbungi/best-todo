@@ -13,7 +13,7 @@ export function seed(db) {
       ['blog', 'blog'],
       ['wish', 'ほしい物リスト'],
     ])
-      db.prepare('INSERT OR IGNORE INTO lists VALUES (?, ?)').run(id, name);
+      db.prepare('INSERT OR IGNORE INTO lists (id,name) VALUES (?, ?)').run(id, name);
     [
       'pcスマホの履歴から日記自動',
       'センサーと自動農業',

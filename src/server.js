@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
 const envSessionHours = process.env.AUTH_SESSION_TTL_HOURS || '24';
 db.prepare('INSERT OR IGNORE INTO settings VALUES (?, ?)').run('sessionTtlHours', envSessionHours);
-setSessionTtlHours(db.prepare('SELECT value FROM settings WHERE key=?').get('sessionTtlHours').value);
+setSessionTtlHours(
+  db.prepare('SELECT value FROM settings WHERE key=?').get('sessionTtlHours').value,
+);
 // Additive migration keeps all existing tasks and notes intact.
 const columns = db
   .prepare('PRAGMA table_info(tasks)')
@@ -43,7 +45,19 @@ if (!columns.includes('sortOrder')) {
   db.exec('ALTER TABLE tasks ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0');
   db.exec('UPDATE tasks SET sortOrder=rowid');
 }
-db.prepare('INSERT OR IGNORE INTO lists VALUES (?, ?)').run('inbox', 'タスク');
+const listColumns = db
+  .prepare('PRAGMA table_info(lists)')
+  .all()
+  .map((c) => c.name);
+for (const [name, definition] of Object.entries({
+  pinned: 'INTEGER NOT NULL DEFAULT 0',
+  icon: "TEXT NOT NULL DEFAULT '☰'",
+  color: "TEXT NOT NULL DEFAULT '#6488d8'",
+})) {
+  if (!listColumns.includes(name)) db.exec(`ALTER TABLE lists ADD COLUMN ${name} ${definition}`);
+}
+if (!db.prepare('SELECT id FROM lists LIMIT 1').get())
+  db.prepare('INSERT INTO lists (id,name) VALUES (?, ?)').run('inbox', 'マイタスク');
 if (process.env.SEED_DATA === 'true') {
   if (process.env.NODE_ENV === 'production') throw new Error('Production seed is disabled');
   seed(db);
@@ -216,7 +230,7 @@ export const server = http.createServer(async (req, res) => {
           for (const item of items) {
             if (!lists.has(item.list)) {
               const id = randomUUID();
-              db.prepare('INSERT INTO lists VALUES (?,?)').run(id, item.list);
+              db.prepare('INSERT INTO lists (id,name) VALUES (?,?)').run(id, item.list);
               lists.set(item.list, id);
             }
             insert.run(
@@ -247,8 +261,8 @@ export const server = http.createServer(async (req, res) => {
       if (p === '/api/lists' && method === 'POST') {
         const b = await body(req);
         const item = { id: randomUUID(), name: cleanText(b.name, 'リスト名', 100) };
-        db.prepare('INSERT INTO lists VALUES (?,?)').run(item.id, item.name);
-        return send(201, item);
+        db.prepare('INSERT INTO lists (id,name) VALUES (?,?)').run(item.id, item.name);
+        return send(201, db.prepare('SELECT * FROM lists WHERE id=?').get(item.id));
       }
       const lm = p.match(/^\/api\/lists\/([^/]+)$/);
       if (lm) {
@@ -256,12 +270,28 @@ export const server = http.createServer(async (req, res) => {
         listExists(id);
         if (method === 'PATCH') {
           const b = await body(req);
-          const name = cleanText(b.name, 'リスト名', 100);
-          db.prepare('UPDATE lists SET name=? WHERE id=?').run(name, id);
-          return send(200, { id, name });
+          const next = { ...db.prepare('SELECT * FROM lists WHERE id=?').get(id) };
+          if ('name' in b) next.name = cleanText(b.name, 'リスト名', 100);
+          if ('icon' in b) next.icon = cleanText(b.icon, 'アイコン', 8);
+          if ('color' in b) {
+            if (typeof b.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(b.color))
+              fail(400, '色が不正です');
+            next.color = b.color;
+          }
+          if ('pinned' in b) {
+            if (typeof b.pinned !== 'boolean') fail(400, 'ピン留めの値が不正です');
+            next.pinned = Number(b.pinned);
+          }
+          db.prepare('UPDATE lists SET name=?,icon=?,color=?,pinned=? WHERE id=?').run(
+            next.name,
+            next.icon,
+            next.color,
+            next.pinned,
+            id,
+          );
+          return send(200, next);
         }
         if (method === 'DELETE') {
-          if (id === 'inbox') fail(400, '標準のタスクは削除できません');
           db.prepare('DELETE FROM lists WHERE id=?').run(id);
           return send(200, { deleted: true });
         }

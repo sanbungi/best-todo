@@ -1491,6 +1491,73 @@ dialog {
   margin-left: 8px;
 }
 
+.list-nav {
+  position: relative;
+}
+.list-nav .nav {
+  width: 100%;
+  padding-right: 38px;
+}
+.list-nav .nav > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-options {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  color: #aaa;
+  border-radius: 6px;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+.list-options:hover,
+.list-options:focus-visible {
+  background: #444;
+  color: white;
+}
+.menu.list-context-menu {
+  position: fixed;
+  right: auto;
+  width: 224px;
+  max-width: calc(100vw - 16px);
+  z-index: 1000;
+  box-shadow: 0 12px 36px #0008;
+}
+.list-context-menu button:focus-visible {
+  outline: 2px solid #a8b7f0;
+  outline-offset: -2px;
+}
+.appearance-fields {
+  display: grid;
+  gap: 16px;
+}
+.appearance-fields label {
+  display: grid;
+  gap: 8px;
+}
+.appearance-fields input[type='color'] {
+  width: 100%;
+  height: 42px;
+  background: transparent;
+  border: 1px solid #555;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.icon-presets {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.icon-presets .btn {
+  padding: 8px;
+  font-size: 20px;
+}
+
 /* Shared input language: same height, radius, border, and action placement. */
 .control {
   width: 100%;

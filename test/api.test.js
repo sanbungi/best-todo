@@ -60,7 +60,9 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
   try {
     await start();
     assert.deepEqual(await req('/tasks'), []);
-    assert.deepEqual(await req('/lists'), [{ id: 'inbox', name: 'タスク' }]);
+    assert.deepEqual(await req('/lists'), [
+      { id: 'inbox', name: 'マイタスク', pinned: 0, icon: '☰', color: '#6488d8' },
+    ]);
     await req('/auth/login', 'POST', { username: 'tester', password: 'incorrect' }, 401);
     const preflight = await fetch(base + '/api/tasks', {
       method: 'OPTIONS',
@@ -72,6 +74,20 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
     assert.equal(preflight.status, 204);
     assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://frontend.example');
     const l = await req('/lists', 'POST', { name: 'テスト' }, 201);
+    const styled = await req('/lists/' + l.id, 'PATCH', {
+      pinned: true,
+      icon: '💼',
+      color: '#ff8800',
+    });
+    assert.equal(styled.pinned, 1);
+    assert.equal(styled.icon, '💼');
+    assert.equal(styled.color, '#ff8800');
+    const renamed = await req('/lists/' + l.id, 'PATCH', { name: '変更後' });
+    assert.equal(renamed.pinned, 1);
+    assert.equal(renamed.icon, '💼');
+    await req('/lists/' + l.id, 'PATCH', { pinned: 'true' }, 400);
+    await req('/lists/' + l.id, 'PATCH', { color: 'red' }, 400);
+    await req('/lists/' + l.id, 'PATCH', { icon: '' }, 400);
     const t = await req(
       '/tasks',
       'POST',
@@ -113,7 +129,7 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
     await req('/tasks/' + t.id, 'PATCH', { completed: 'true' }, 400);
     await req('/tasks', 'POST', { title: ' ', listId: l.id }, 400);
     await req('/tasks', 'POST', { title: 'test', listId: 'missing' }, 404);
-    await req('/lists/inbox', 'DELETE', undefined, 400);
+    await req('/lists/inbox', 'DELETE');
     const denied = await fetch(base + '/api/lists', {
       headers: { Origin: 'https://evil.example' },
     });

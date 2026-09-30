@@ -75,7 +75,43 @@ test(
       await page.getByLabel('ユーザー名').fill('tester');
       await page.getByLabel('パスワード').fill('test-password-123');
       await page.getByRole('button', { name: 'ログイン', exact: true }).click();
-      await page.getByRole('heading', { name: 'タスク', exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'マイタスク', exact: true }).waitFor();
+      assert.equal(
+        await page
+          .locator('[data-view="today"], [data-view="important"], [data-view="planned"]')
+          .count(),
+        0,
+      );
+      await page.locator('[data-list-id="inbox"]').click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'ピン留め', exact: true }).click();
+      await page.waitForFunction(
+        () => document.querySelector('.list-caption')?.textContent === 'ピン留め',
+      );
+      await page.locator('[data-list-id="inbox"]').first().click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'アイコンと色を設定' }).click();
+      await page.locator('[data-icon="💼"]').click();
+      await page.locator('input[name="color"]').fill('#ff8800');
+      await page.locator('#list-form button[type="submit"]').click();
+      await page.waitForFunction(
+        () => document.querySelector('[data-list-id="inbox"] .nav-icon')?.textContent === '💼',
+      );
+      await page.reload();
+      await page.locator('[data-list-id="inbox"]').first().waitFor();
+      assert.equal(await page.locator('[data-list-id="inbox"]').count(), 1);
+      assert.equal(await page.locator('.list-caption').last().textContent(), 'マイリスト 0');
+      assert.equal(
+        await page
+          .locator('[data-list-id="inbox"] .nav-icon')
+          .first()
+          .evaluate((el) => el.style.color),
+        'rgb(255, 136, 0)',
+      );
+      await page.locator('[data-list-options="inbox"]').first().click();
+      await page.getByRole('menuitem', { name: 'ピン留めを解除' }).click();
+      await page.waitForFunction(
+        () => document.querySelector('.list-caption')?.textContent === 'マイリスト 1',
+      );
+      assert.equal(await page.locator('[data-list-id="inbox"]').count(), 1);
       await page.getByRole('textbox', { name: '新しいタスク' }).fill('E2E テストのタスク');
       await page.getByRole('textbox', { name: '新しいタスク' }).press('Enter');
       const task = page.locator('article.task').filter({ hasText: 'E2E テストのタスク' });
@@ -86,7 +122,7 @@ test(
       await page.getByRole('button', { name: '今日の予定に追加' }).click();
       await task.getByRole('button', { name: '重要マークを切り替える' }).click();
       await page.reload();
-      await page.getByRole('heading', { name: 'タスク', exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'マイタスク', exact: true }).waitFor();
       await task.getByRole('button', { name: 'E2E テストのタスク' }).click();
       assert.equal(
         await page.getByRole('textbox', { name: 'メモ' }).inputValue(),
