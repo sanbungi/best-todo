@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 test('API lifecycle, validation, persistence and cascading deletion', async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'everyday-test-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'best-todo-test-'));
   let child, base, token;
   async function start() {
     child = spawn(process.execPath, ['server.js'], {

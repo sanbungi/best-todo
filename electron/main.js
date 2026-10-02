@@ -12,7 +12,7 @@ let reloadTimer;
 
 function createWindow() {
   window = new BrowserWindow({
-    title: 'Everyday To Do',
+    title: 'Best ToDo',
     width: 1280,
     height: 860,
     minWidth: 720,
@@ -107,7 +107,7 @@ if (!app.requestSingleInstanceLock()) {
       }
     } catch (error) {
       dialog.showErrorBox(
-        'Everyday To Doを起動できません',
+        'Best ToDoを起動できません',
         error.code === 'EADDRINUSE'
           ? 'ポート17880が使用されています。使用中のアプリを終了して再起動してください。'
           : error.message,

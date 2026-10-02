@@ -13,7 +13,7 @@ test(
   'browser: tasks, memo and table modes persist, remain searchable and fit mobile',
   { timeout: 30000 },
   async () => {
-    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'everyday-e2e-'));
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'best-todo-e2e-'));
     const frontend = spawn(process.execPath, ['src/frontend.js'], {
       cwd: root,
       env: { ...process.env, HOST: '127.0.0.1', PORT: '0' },

@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'com.everydaytodo.android'
+    namespace 'com.besttodo.android'
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.everydaytodo.android'
+        applicationId 'com.besttodo.android'
         minSdk 24
         targetSdk 35
         versionCode 1

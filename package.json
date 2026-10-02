@@ -1,13 +1,13 @@
 {
-  "name": "everyday-todo",
+  "name": "best-todo",
   "version": "1.0.0",
   "private": true,
   "description": "日本語のTo Doデスクトップクライアント",
-  "author": "Everyday To Do contributors",
+  "author": "Best ToDo contributors",
   "main": "electron/main.js",
   "build": {
-    "appId": "com.everydaytodo.desktop",
-    "productName": "Everyday To Do",
+    "appId": "com.besttodo.desktop",
+    "productName": "Best ToDo",
     "asar": true,
     "directories": {
       "output": "dist"
