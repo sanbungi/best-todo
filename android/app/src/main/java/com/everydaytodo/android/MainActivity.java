@@ -2,9 +2,11 @@ package com.everydaytodo.android;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.pm.ApplicationInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.KeyEvent;
+import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -32,11 +34,28 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        if (isDebuggable()) {
+            // 開発時のみ http のバックエンドへの接続を許可する
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            webView.addJavascriptInterface(new DevBridge(), "AndroidDev");
+        } else {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        }
 
         webView.setWebViewClient(new LocalAssetWebViewClient());
         setContentView(webView);
         webView.loadUrl(APP_ORIGIN + "/index.html");
+    }
+
+    private boolean isDebuggable() {
+        return (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+    }
+
+    private static class DevBridge {
+        @JavascriptInterface
+        public boolean allowInsecureBackend() {
+            return true;
+        }
     }
 
     @Override

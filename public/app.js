@@ -139,7 +139,11 @@ function showLogin() {
         url.hash
       )
         throw Error('接続先のオリジンURLを指定してください');
-      if (location.protocol === 'https:' && url.protocol !== 'https:')
+      if (
+        location.protocol === 'https:' &&
+        url.protocol !== 'https:' &&
+        !window.AndroidDev?.allowInsecureBackend()
+      )
         throw Error('HTTPSの接続先を指定してください');
       backend = url.origin;
       const result = await api('/auth/login', 'POST', {
