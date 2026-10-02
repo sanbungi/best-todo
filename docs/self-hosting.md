@@ -21,8 +21,8 @@ flowchart LR
 
 `v*` タグとmainへのpushごとにGHCRへイメージを公開しています。
 
-- `ghcr.io/sanbungi/mytodo-backend`
-- `ghcr.io/sanbungi/mytodo-frontend`
+- `ghcr.io/sanbungi/best-todo-backend`
+- `ghcr.io/sanbungi/best-todo-frontend`
 
 タグは `sha-<完全なcommit SHA>`（運用ではこちらを推奨）、`latest`、バージョン（例: `1.2.3`）です。`latest` はタグ時とmainからのビルドで付きます。
 

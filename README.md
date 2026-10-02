@@ -5,8 +5,8 @@
 **タスク・メモ・表を、ひとつのリストに。**<br>
 セルフホストできる、日本語の単一ユーザー向けTo Doアプリ。
 
-[![CI](https://github.com/sanbungi/mytodo/actions/workflows/ci.yml/badge.svg)](https://github.com/sanbungi/mytodo/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/sanbungi/mytodo?include_prereleases&sort=semver)](https://github.com/sanbungi/mytodo/releases)
+[![CI](https://github.com/sanbungi/best-todo/actions/workflows/ci.yml/badge.svg)](https://github.com/sanbungi/best-todo/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/sanbungi/best-todo?include_prereleases&sort=semver)](https://github.com/sanbungi/best-todo/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Web%20%7C%20Windows%20%7C%20Linux%20%7C%20Android-5865f2)
 
@@ -33,9 +33,9 @@
 | プラットフォーム | 入手方法                                                                  |
 | ---------------- | ------------------------------------------------------------------------- |
 | Web              | 自分のサーバーにデプロイ（[セルフホスト](docs/self-hosting.md)）          |
-| Windows          | [Releases](https://github.com/sanbungi/mytodo/releases) のインストーラー  |
-| Linux            | [Releases](https://github.com/sanbungi/mytodo/releases) の AppImage / deb |
-| Android          | [Releases](https://github.com/sanbungi/mytodo/releases) の APK            |
+| Windows          | [Releases](https://github.com/sanbungi/best-todo/releases) のインストーラー  |
+| Linux            | [Releases](https://github.com/sanbungi/best-todo/releases) の AppImage / deb |
+| Android          | [Releases](https://github.com/sanbungi/best-todo/releases) の APK            |
 
 どのクライアントも、ログイン画面で自分のサーバーのURLを指定して接続します。
 
@@ -44,7 +44,7 @@
 Node.js 22.13以降で、手元ですぐに試せます。
 
 ```sh
-git clone https://github.com/sanbungi/mytodo.git && cd mytodo
+git clone https://github.com/sanbungi/best-todo.git && cd best-todo
 npm ci
 cp .env.example .env   # ユーザー名・パスワードを変更
 npm run dev            # バックエンド（別ターミナルで npm run dev:frontend）
