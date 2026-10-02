@@ -298,7 +298,7 @@ test(
       await page.locator('[data-view="server"]').click();
       await page.getByRole('heading', { name: 'サーバー管理', exact: true }).waitFor();
       assert.equal(await page.locator('.server-preview .avatar').count(), 1);
-      assert.equal(await page.getByLabel('接続先', { exact: true }).inputValue(), base);
+      assert.equal(await page.locator('[data-backend-origin]').textContent(), base);
       await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
       await page.getByRole('heading', { name: 'バックエンドにログイン', exact: true }).waitFor();
       assert.deepEqual(errors, []);

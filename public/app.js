@@ -386,13 +386,35 @@ function detail(t) {
       : '';
   return `<aside class="detail entry-${kind}"><div class="detail-top"><span>${modes[kind].name}の詳細</span><button type="button" class="icon-button" data-close aria-label="詳細を閉じる">✕</button></div>${kind === 'table' ? tableEditor(draft.cells) : titleField}${steps}<label class="field">期限<input class="control" type="date" id="due" value="${esc(t.dueDate)}"></label><label class="field">リスト<select class="control" id="move">${state.lists.map((l) => `<option value="${l.id}" ${l.id === t.listId ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label><form id="note-form" class="stack-form"><label for="note">メモ</label><textarea id="note" class="control" name="note" placeholder="詳細を書き留める" maxlength="10000" ${kind === 'memo' ? 'required' : ''}>${esc(draft.note)}</textarea></form><div class="detail-bottom"><small>${new Date(t.createdAt).toLocaleDateString('ja-JP')} に作成 · 変更は自動で保存されます</small><button type="button" class="btn btn-danger" data-delete-task>${modes[kind].name}を削除</button></div></aside>`;
 }
+const panel = (title, description, body) =>
+  `<section class="server-panel"><div class="panel-head"><h2>${title}</h2><p>${description}</p></div>${body}</section>`;
 function serverSettings() {
   const profile = serverProfile();
   const session = state.sessionSettings;
   const expires = session?.currentSessionExpiresAt
     ? new Date(session.currentSessionExpiresAt).toLocaleString('ja-JP')
     : '取得中…';
-  return `<main class="server-main"><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>サーバー管理</h1><p>接続先、ログインセッション、CSVを管理します</p></div></div></header><section class="server-panel"><div class="server-preview"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><form id="server-form" class="stack-form"><label>ワークスペース名<input class="control" name="name" maxlength="80" value="${esc(profile.name)}" required autocomplete="organization"></label><label>ロゴ文字<input class="control" name="logo" maxlength="2" value="${esc(profile.logo)}" required autocapitalize="characters"></label><label>接続先<input class="control" value="${esc(backendOrigin())}" readonly></label><div class="field-actions"><button class="save" type="submit">保存</button><button type="button" class="btn" data-reset-server>接続先から自動設定</button><button type="button" class="btn btn-danger" data-change-server>接続先を変更</button><button type="button" class="btn" data-logout>ログアウト</button></div></form></section><section class="server-panel"><h2>ログインセッション</h2><p class="field-hint">ログイン状態を維持する時間を設定します。変更後の新しいログインから適用されます。</p><div class="server-preview"><div><strong>${session ? `${session.activeSessions} セッション` : '取得中…'}</strong><small>現在のセッション期限: ${esc(expires)}</small></div></div><form id="session-form" class="stack-form"><label>ログイン維持時間（時間）<input class="control" name="sessionTtlHours" type="number" min="1" max="8760" step="1" value="${esc(String(session?.sessionTtlHours ?? 24))}" required></label><div class="field-actions"><button class="save" type="submit">セッション設定を保存</button><button type="button" class="btn btn-danger" data-revoke-sessions>他のセッションをログアウト</button></div></form></section><section class="server-panel"><h2>CSV 一括インポート／エクスポート</h2><p class="field-hint">全リストのタスク・メモ・表をUTF-8 CSVで保存します。インポートは追加のみ（再取込すると重複）。同名リストに追加し、存在しないリストは作成します。空のリストは対象外です。</p><button type="button" class="btn" data-export-csv>CSVをエクスポート</button><form id="csv-form" class="stack-form"><label>CSVファイル（UTF-8・最大5MB）<input class="control" type="file" name="csv" accept=".csv,text/csv" required></label><p class="field-hint">エクスポートしたCSVのヘッダーを使用してください。completed / important はtrueまたはfalse、日付はYYYY-MM-DD、cells / steps はJSON形式です。</p><button class="save" type="submit">CSVをインポート</button></form></section></main>`;
+  const workspace = panel(
+    'ワークスペース',
+    'この画面に表示する名前とロゴです。このブラウザにだけ保存されます。',
+    `<div class="server-preview"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><form id="server-form" class="panel-form"><div class="field-row"><label>ワークスペース名<input class="control" name="name" maxlength="80" value="${esc(profile.name)}" required autocomplete="organization"></label><label class="field-narrow">ロゴ文字<input class="control" name="logo" maxlength="2" value="${esc(profile.logo)}" required autocapitalize="characters"></label></div><div class="panel-actions"><button class="save" type="submit">保存</button><button type="button" class="btn" data-reset-server>初期値に戻す</button></div></form>`,
+  );
+  const connection = panel(
+    '接続',
+    'タスクを保存しているバックエンドです。',
+    `<dl class="info-list"><div><dt>接続先</dt><dd data-backend-origin>${esc(backendOrigin())}</dd></div></dl><div class="panel-actions"><button type="button" class="btn" data-logout>ログアウト</button><button type="button" class="btn" data-change-server>接続先を変更</button></div>`,
+  );
+  const sessions = panel(
+    'ログインセッション',
+    'ログイン状態を保つ時間です。変更は次回のログインから適用されます。',
+    `<dl class="info-list"><div><dt>有効なセッション</dt><dd>${session ? `${session.activeSessions} 件` : '取得中…'}</dd></div><div><dt>このセッションの期限</dt><dd>${esc(expires)}</dd></div></dl><form id="session-form" class="panel-form"><label class="field-narrow">ログイン維持時間<span class="input-unit"><input class="control" name="sessionTtlHours" type="number" min="1" max="8760" step="1" value="${esc(String(session?.sessionTtlHours ?? 24))}" required><span>時間</span></span></label><div class="panel-actions"><button class="save" type="submit">保存</button><button type="button" class="btn btn-danger" data-revoke-sessions>他のセッションをログアウト</button></div></form>`,
+  );
+  const data = panel(
+    'データ',
+    '全リストのタスク・メモ・表を UTF-8 の CSV で書き出し・読み込みします。',
+    `<div class="data-row"><div><strong>エクスポート</strong><small>すべての項目を CSV ファイルに保存します。</small></div><button type="button" class="btn" data-export-csv>エクスポート</button></div><form id="csv-form" class="data-row"><div><strong>インポート</strong><small>項目を追加します。既存の項目は変更せず、同名のリストに追加します（なければ作成）。</small><label class="file-picker"><input type="file" name="csv" accept=".csv,text/csv" aria-label="CSVファイル（UTF-8・最大5MB）"><span class="btn" aria-hidden="true">ファイルを選択</span><span class="file-name" data-file-name>選択されていません</span></label></div><button class="save" type="submit">インポート</button></form><details class="format-help"><summary>CSV の形式</summary><p>エクスポートした CSV と同じヘッダーを使ってください。completed / important は true か false、日付は YYYY-MM-DD、cells / steps は JSON 形式です。同じファイルを再度取り込むと項目が重複します。空のリストは書き出されません。最大 5MB。</p></details>`,
+  );
+  return `<main class="server-main"><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>サーバー管理</h1><p>ワークスペース・接続・データを管理します</p></div></div></header><div class="server-panels">${workspace}${connection}${sessions}${data}</div></main>`;
 }
 let renderedDay = today();
 setInterval(() => {
@@ -673,16 +695,20 @@ function bind() {
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       });
+    $('#csv-form').elements.csv.onchange = (event) => {
+      $('[data-file-name]').textContent = event.target.files[0]?.name || '選択されていません';
+    };
     $('#csv-form').onsubmit = (event) => {
       event.preventDefault();
       const form = event.currentTarget;
-      const button = form.querySelector('button');
+      const button = form.querySelector('[type="submit"]');
       if (button.disabled) return;
       button.disabled = true;
       run(async () => {
         try {
           const file = form.elements.csv.files[0];
-          if (!file || file.size > 5000000) throw Error('5MB以下のCSVを選択してください');
+          if (!file) throw Error('CSVファイルを選択してください');
+          if (file.size > 5000000) throw Error('5MB以下のCSVを選択してください');
           const items = importCsv(await file.text());
           if (!items.length) throw Error('インポートする項目がありません');
           if (!confirm(`${items.length}件を追加します。既存の項目は変更しません。よろしいですか？`))

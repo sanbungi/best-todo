@@ -10,3 +10,15 @@ test-results/
 playwright-report/
 .DS_Store
 Thumbs.db
+
+# Android local settings and generated files
+/android/.gradle/
+/android/.idea/
+/android/**/build/
+/android/local.properties
+/android/**/*.iml
+/android/.externalNativeBuild/
+/android/.cxx/
+/android/app/.externalNativeBuild/
+/android/app/.cxx/
+/android/app/src/main/assets/public/

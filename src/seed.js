@@ -56,6 +56,7 @@ function day(offset) {
 }
 
 // Covers every entry kind and display state: steps, due dates, notes, completion and dated lists.
+// Only tasks can be completed, as the API enforces.
 function seedVariety(db) {
   if (db.prepare('SELECT id FROM seeds WHERE id=?').get('demo-v2')) return;
   const lists = [
@@ -120,13 +121,12 @@ function seedVariety(db) {
     ['seed-work', { kind: 'table', cells: ['佐藤', 'API設計', 'レビュー中'] }],
     ['seed-work', { kind: 'table', cells: ['鈴木', '画面実装', ''] }],
     ['seed-work', { title: '経費精算', completed: 1, dueDate: day(-3) }],
-    ['seed-work', { kind: 'memo', note: '済んだ議事録メモ', completed: 1 }],
     // Shopping: table rows with varying column counts.
     ['seed-shopping', { kind: 'table', cells: ['牛乳', '2本'] }],
     ['seed-shopping', { kind: 'table', cells: ['卵', '1パック', '¥280'] }],
     ['seed-shopping', { kind: 'table', cells: ['トマト', '3個', '¥398', '八百屋', '赤いもの'] }],
     ['seed-shopping', { kind: 'table', cells: ['パン', '', '¥200'] }],
-    ['seed-shopping', { kind: 'table', cells: ['洗剤', '詰め替え'], completed: 1 }],
+    ['seed-shopping', { title: '洗剤の詰め替えを買う', completed: 1 }],
     ['seed-shopping', { title: 'ポイントカードを持っていく' }],
     ['seed-shopping', { kind: 'memo', note: '日曜はスーパーが混むので土曜の夜に行く' }],
     // Reading: memos of different lengths.
@@ -174,7 +174,12 @@ function seedVariety(db) {
       insert.run(
         `seed2-${i}`,
         listId,
-        e.title || '',
+        // Same derived titles the API stores for memos and table rows.
+        e.kind === 'memo'
+          ? e.note.slice(0, 500)
+          : e.kind === 'table'
+            ? e.cells.filter(Boolean).join(' | ').slice(0, 500)
+            : e.title,
         e.note || '',
         e.kind || 'task',
         JSON.stringify(e.cells || []),
