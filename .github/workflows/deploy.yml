@@ -29,10 +29,12 @@ jobs:
       matrix:
         include:
           - service: backend
-            app: ${{ vars.CAPROVER_BACKEND_APP || 'todo-backend' }}
+            app: todo-backend
+            app_var: CAPROVER_BACKEND_APP
             token: CAPROVER_BACKEND_TOKEN
           - service: frontend
-            app: ${{ vars.CAPROVER_FRONTEND_APP || 'todo-frontend' }}
+            app: todo-frontend
+            app_var: CAPROVER_FRONTEND_APP
             token: CAPROVER_FRONTEND_TOKEN
     steps:
       - name: Image name
@@ -49,6 +51,7 @@ jobs:
       - uses: caprover/deploy-from-github@v2
         with:
           server: ${{ secrets.CAPROVER_URL }}
-          app: ${{ matrix.app }}
+          # environmentのVariablesも読めるよう、matrixではなくステップで解決する
+          app: ${{ vars[matrix.app_var] || matrix.app }}
           token: ${{ secrets[matrix.token] }}
           image: ${{ steps.image.outputs.name }}
