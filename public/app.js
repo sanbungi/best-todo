@@ -6,30 +6,37 @@ import {
   tasksForView,
   visibleTasks,
   orderedLists,
+  formatDue,
 } from './task-utils.js';
 const $ = (s) => document.querySelector(s);
-const icons = {
-  sun: '☀',
-  star: '☆',
-  calendar: '▣',
-  home: '⌂',
-  list: '☰',
-  plus: '＋',
-  search: '⌕',
-  server: '⚙',
-};
+const sorts = { manual: '手動順', created: '追加順', due: '期限順', title: '名前順' };
+const prefsKey = 'viewPrefs';
+const prefs = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(prefsKey) || '{}');
+  } catch {
+    return {};
+  }
+})();
+function savePrefs() {
+  try {
+    localStorage.setItem(prefsKey, JSON.stringify({ sort: state.sort, showDone: state.showDone }));
+  } catch {}
+}
 const state = {
   lists: [],
   tasks: [],
   view: 'inbox',
   query: '',
   selected: null,
-  sort: 'manual',
-  showDone: true,
+  sort: prefs.sort in sorts ? prefs.sort : 'manual',
+  showDone: prefs.showDone ?? true,
   menu: false,
   mobile: false,
   mode: 'task',
   drafts: { task: '', memo: '', cells: ['', ''] },
+  // Unsaved detail-panel edits, kept across re-renders until they are saved.
+  draft: null,
   saving: false,
   sessionSettings: null,
   loadingSessionSettings: false,
@@ -93,18 +100,24 @@ function serverProfile() {
     return {
       name: defaultServerName(),
       logo: defaultServerLogo(),
-      ...JSON.parse(sessionStorage.getItem(serverProfileKey()) || '{}'),
+      ...JSON.parse(
+        localStorage.getItem(serverProfileKey()) ||
+          sessionStorage.getItem(serverProfileKey()) ||
+          '{}',
+      ),
     };
   } catch {
     return { name: defaultServerName(), logo: defaultServerLogo() };
   }
 }
 function showLogin() {
+  commitDelete();
   token = '';
   clearLogin();
   state.lists = [];
   state.tasks = [];
   state.selected = null;
+  state.draft = null;
   state.view = 'inbox';
   state.query = '';
   state.drafts = { task: '', memo: '', cells: ['', ''] };
@@ -158,11 +171,22 @@ async function api(path, method = 'GET', data) {
   }
   return result;
 }
-function toast(message) {
-  $('#toast').textContent = message;
-  $('#toast').classList.add('visible');
+function toast(message, action) {
+  const box = $('#toast');
+  box.textContent = message;
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = action.label;
+    button.onclick = () => {
+      box.classList.remove('visible');
+      action.run();
+    };
+    box.append(button);
+  }
+  box.classList.add('visible');
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => $('#toast').classList.remove('visible'), 3500);
+  toast.timer = setTimeout(() => box.classList.remove('visible'), action ? 5000 : 3500);
 }
 async function run(fn) {
   try {
@@ -173,6 +197,7 @@ async function run(fn) {
 }
 async function refresh() {
   [state.lists, state.tasks] = await Promise.all([api('/lists'), api('/tasks')]);
+  state.tasks = withoutPendingDelete(state.tasks);
   if (state.view !== 'server' && !state.lists.some((l) => l.id === state.view))
     state.view = state.lists[0]?.id || 'server';
   render();
@@ -185,6 +210,98 @@ async function patch(id, data) {
 function filter(view) {
   return tasksForView(state.tasks, view);
 }
+// Deletion waits for the undo window to pass, so the item can come back untouched.
+let pendingDelete = null;
+const withoutPendingDelete = (tasks) => tasks.filter((t) => t.id !== pendingDelete?.task.id);
+function commitDelete() {
+  if (!pendingDelete) return;
+  const { task, timer } = pendingDelete;
+  clearTimeout(timer);
+  pendingDelete = null;
+  run(() => api('/tasks/' + task.id, 'DELETE'));
+}
+function deleteTask(task) {
+  commitDelete();
+  state.tasks = state.tasks.filter((t) => t.id !== task.id);
+  if (state.selected === task.id) closeDetail(false);
+  render();
+  pendingDelete = { task, timer: setTimeout(commitDelete, 5000) };
+  toast(`${modes[task.kind || 'task'].name}を削除しました`, {
+    label: '元に戻す',
+    run: () => {
+      if (pendingDelete?.task !== task) return;
+      clearTimeout(pendingDelete.timer);
+      pendingDelete = null;
+      state.tasks.push(task);
+      render();
+    },
+  });
+}
+function draftFor(t) {
+  if (state.draft?.id !== t.id)
+    state.draft = { id: t.id, title: t.title, note: t.note, cells: [...t.cells] };
+  return state.draft;
+}
+const draftFields = (t) =>
+  t.kind === 'table' ? ['cells', 'note'] : t.kind === 'memo' ? ['note'] : ['title', 'note'];
+const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Detail edits save on blur. Saves run one at a time so a later edit always wins.
+let detailSaves = Promise.resolve();
+function saveDraft(field) {
+  const draft = state.draft;
+  if (!draft) return detailSaves;
+  const value = field === 'cells' ? [...draft.cells] : draft[field];
+  detailSaves = detailSaves.then(() =>
+    run(async () => {
+      const t = state.tasks.find((x) => x.id === draft.id);
+      if (!t || sameValue(t[field], value)) return;
+      if (
+        field === 'title'
+          ? !value.trim()
+          : field === 'cells'
+            ? !value.some((c) => c.trim())
+            : t.kind === 'memo' && !value.trim()
+      )
+        throw Error('内容を入力してください');
+      await patch(t.id, { [field]: value });
+    }),
+  );
+  return detailSaves;
+}
+function flushDraft() {
+  const t = state.tasks.find((x) => x.id === state.draft?.id);
+  if (t) draftFields(t).forEach(saveDraft);
+}
+function closeDetail(flush = true) {
+  if (flush) flushDraft();
+  state.selected = null;
+  state.draft = null;
+}
+function openDetail(id) {
+  if (state.selected !== id) closeDetail();
+  state.selected = id;
+}
+addEventListener('pagehide', () => {
+  const send = (path, method, data) =>
+    fetch(backend + '/api' + path, {
+      method,
+      keepalive: true,
+      credentials: 'omit',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: data ? JSON.stringify(data) : undefined,
+    }).catch(() => {});
+  if (!token) return;
+  if (pendingDelete) send('/tasks/' + pendingDelete.task.id, 'DELETE');
+  pendingDelete = null;
+  const t = state.tasks.find((x) => x.id === state.draft?.id);
+  if (!t) return;
+  const changes = Object.fromEntries(
+    draftFields(t)
+      .filter((f) => !sameValue(t[f], state.draft[f]))
+      .map((f) => [f, state.draft[f]]),
+  );
+  if (Object.keys(changes).length) send('/tasks/' + t.id, 'PATCH', changes);
+});
 function nav(list) {
   const { id, name, icon } = list;
   const n = filter(id).filter((t) => !t.completed).length;
@@ -195,6 +312,19 @@ const modes = {
   memo: { name: 'メモ', icon: '≡' },
   table: { name: '表', icon: '▤' },
 };
+function meta(t) {
+  const list = state.query && state.lists.find((l) => l.id === t.listId);
+  const parts = [
+    list ? `<span class="list-badge">${esc(list.icon)} ${esc(list.name)}</span>` : '',
+    t.dueDate
+      ? `<span class="${t.dueDate < today() && !t.completed ? 'overdue' : ''}" title="${esc(t.dueDate)}">${esc(formatDue(t.dueDate))}まで</span>`
+      : '',
+    t.steps.length
+      ? `<span>${t.steps.filter((s) => s.completed).length}/${t.steps.length} ステップ</span>`
+      : '',
+  ].filter(Boolean);
+  return parts.length ? `<small class="meta">${parts.join('')}</small>` : '';
+}
 function row(t) {
   const kind = t.kind || 'task';
   const content =
@@ -203,7 +333,7 @@ function row(t) {
       : kind === 'memo'
         ? `<span class="memo-body">${esc(t.note)}</span>`
         : `<span>${esc(t.title)}</span>${t.note ? `<span class="inline-note">${esc(t.note)}</span>` : ''}`;
-  return `<article data-item-id="${t.id}" data-completed="${t.completed}" class="task entry-${kind} ${t.completed ? 'done' : ''} ${state.selected === t.id ? 'selected' : ''}">${kind === 'task' ? `<button class="check ${t.completed ? 'checked' : ''}" data-check="${t.id}" aria-label="${t.completed ? '未完了に戻す' : '完了にする'}">${t.completed ? '✓' : ''}</button>` : `<span class="entry-symbol" aria-label="${modes[kind].name}">${modes[kind].icon}</span>`}<button class="task-content" data-open="${t.id}" ${kind === 'table' ? 'aria-label="表の行を編集"' : ''}>${content}${t.dueDate || t.myDay === today() || t.steps.length ? `<small>${t.myDay === today() ? '☀ 今日の予定　' : ''}${t.dueDate ? `<span class="${t.dueDate < today() && !t.completed ? 'overdue' : ''}">▣ ${esc(t.dueDate)}</span>` : ''}${t.steps.length ? `　${t.steps.filter((s) => s.completed).length}/${t.steps.length} ステップ` : ''}</small>` : ''}</button><button class="star-button ${t.important ? 'on' : ''}" data-star="${t.id}" aria-label="重要マークを切り替える">${t.important ? '★' : '☆'}</button></article>`;
+  return `<article data-item-id="${t.id}" data-completed="${t.completed}" class="task entry-${kind} ${t.completed ? 'done' : ''} ${state.selected === t.id ? 'selected' : ''}">${kind === 'task' ? `<button class="check ${t.completed ? 'checked' : ''}" data-check="${t.id}" aria-label="${t.completed ? '未完了に戻す' : '完了にする'}">${t.completed ? '✓' : ''}</button>` : `<span class="entry-symbol" aria-label="${modes[kind].name}">${modes[kind].icon}</span>`}<button class="task-content" data-open="${t.id}" ${kind === 'table' ? 'aria-label="表の行を編集"' : ''}>${content}${meta(t)}</button></article>`;
 }
 
 function cellInputs(cells, prefix, labeled = false) {
@@ -240,20 +370,21 @@ function composer() {
       '<span class="mode-divider" aria-hidden="true"></span>',
     )}</div><form id="add-form" class="add-${mode}" aria-busy="${state.saving}">${field}</form></footer>`;
 }
-function tableEditor(t) {
-  return `<form id="cells-form" class="stack-form"><div id="edit-cells" class="edit-cells">${cellInputs(t.cells, '編集する行', true)}</div><div class="field-actions"><button class="save" type="submit">行を保存</button></div></form>`;
+function tableEditor(cells) {
+  return `<form id="cells-form" class="stack-form"><div id="edit-cells" class="edit-cells">${cellInputs(cells, '編集する行', true)}</div></form>`;
 }
 function detail(t) {
   const kind = t.kind || 'task';
+  const draft = draftFor(t);
   const titleField =
     kind === 'task'
-      ? `<form id="title-form" class="stack-form"><label for="title">タスク名</label><input id="title" class="control" name="title" maxlength="500" required autocomplete="off" value="${esc(t.title)}"><div class="field-actions"><button class="save" type="submit">タイトルを保存</button></div></form>`
+      ? `<form id="title-form" class="stack-form"><label for="title">タスク名</label><input id="title" class="control" name="title" maxlength="500" required autocomplete="off" enterkeyhint="done" value="${esc(draft.title)}"></form>`
       : '';
   const steps =
     kind === 'task'
       ? `<div class="steps"><p class="field-label">ステップ</p>${t.steps.map((s) => `<div class="step"><input type="checkbox" aria-label="${esc(s.title)}" data-step="${esc(s.id)}" ${s.completed ? 'checked' : ''}><span class="${s.completed ? 'strike' : ''}">${esc(s.title)}</span><button type="button" class="icon-button" data-remove-step="${esc(s.id)}" aria-label="ステップを削除">×</button></div>`).join('')}<form id="step-form" class="inline-add"><input class="control" name="step" placeholder="ステップを追加" maxlength="500" required aria-label="新しいステップ" autocomplete="off" enterkeyhint="done"><button class="save" type="submit">追加</button></form></div>`
       : '';
-  return `<aside class="detail entry-${kind}"><div class="detail-top"><span>${modes[kind].name}の詳細</span><button type="button" class="icon-button" data-close aria-label="詳細を閉じる">✕</button></div>${kind === 'table' ? tableEditor(t) : titleField}${steps}<button type="button" class="detail-action ${t.myDay === today() ? 'accent' : ''}" data-day>☀　${t.myDay === today() ? '今日の予定から削除' : '今日の予定に追加'}</button><label class="field">期限<input class="control" type="date" id="due" value="${esc(t.dueDate)}"></label><label class="field">リスト<select class="control" id="move">${state.lists.map((l) => `<option value="${l.id}" ${l.id === t.listId ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label><form id="note-form" class="stack-form"><label for="note">メモ</label><textarea id="note" class="control" name="note" placeholder="詳細を書き留める" maxlength="10000" ${kind === 'memo' ? 'required' : ''}>${esc(t.note)}</textarea><div class="field-actions"><button class="save" type="submit">メモを保存</button></div></form><div class="detail-bottom"><small>${new Date(t.createdAt).toLocaleDateString('ja-JP')} に作成</small><button type="button" class="btn btn-danger" data-delete-task>${modes[kind].name}を削除</button></div></aside>`;
+  return `<aside class="detail entry-${kind}"><div class="detail-top"><span>${modes[kind].name}の詳細</span><button type="button" class="icon-button" data-close aria-label="詳細を閉じる">✕</button></div>${kind === 'table' ? tableEditor(draft.cells) : titleField}${steps}<label class="field">期限<input class="control" type="date" id="due" value="${esc(t.dueDate)}"></label><label class="field">リスト<select class="control" id="move">${state.lists.map((l) => `<option value="${l.id}" ${l.id === t.listId ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label><form id="note-form" class="stack-form"><label for="note">メモ</label><textarea id="note" class="control" name="note" placeholder="詳細を書き留める" maxlength="10000" ${kind === 'memo' ? 'required' : ''}>${esc(draft.note)}</textarea></form><div class="detail-bottom"><small>${new Date(t.createdAt).toLocaleDateString('ja-JP')} に作成 · 変更は自動で保存されます</small><button type="button" class="btn btn-danger" data-delete-task>${modes[kind].name}を削除</button></div></aside>`;
 }
 function serverSettings() {
   const profile = serverProfile();
@@ -274,7 +405,54 @@ setInterval(() => {
   )
     render();
 }, 30000);
+// A re-render replaces every element, so keep the caret and scroll positions the user had.
+function focusSelector(el) {
+  if (!el || el === document.body || !$('#app').contains(el)) return null;
+  if (el.id) return '#' + CSS.escape(el.id);
+  const attr = [...el.attributes].find((a) => a.name.startsWith('data-'));
+  if (!attr) return null;
+  const scope = el.parentElement?.closest('[id]');
+  return `${scope ? '#' + CSS.escape(scope.id) + ' ' : ''}[${attr.name}="${CSS.escape(attr.value)}"]`;
+}
+const scrollAreas = ['.task-list', '.detail', '.sidebar nav', '.server-main'];
+let composing = false;
+let renderPending = false;
+document.addEventListener('compositionstart', () => (composing = true), true);
+const endComposition = () => {
+  composing = false;
+  if (renderPending) {
+    renderPending = false;
+    setTimeout(render);
+  }
+};
+document.addEventListener('compositionend', endComposition, true);
+document.addEventListener('focusout', () => composing && endComposition(), true);
 function render() {
+  // Replacing an input mid-IME loses the pre-edit text; wait for the commit.
+  if (composing) {
+    renderPending = true;
+    return;
+  }
+  const active = document.activeElement;
+  const focused = focusSelector(active);
+  let caret = null;
+  try {
+    caret = [active.selectionStart, active.selectionEnd];
+  } catch {}
+  const scrolls = scrollAreas.map((s) => $(s)?.scrollTop);
+  renderAll();
+  scrollAreas.forEach((s, i) => {
+    if ($(s) && scrolls[i]) $(s).scrollTop = scrolls[i];
+  });
+  const target = focused && document.querySelector(focused);
+  if (target && target.offsetParent !== null) {
+    target.focus({ preventScroll: true });
+    try {
+      if (caret?.[0] != null) target.setSelectionRange(...caret);
+    } catch {}
+  }
+}
+function renderAll() {
   renderedDay = today();
   const sidebarLists = orderedLists(state.lists, renderedDay);
   const isServer = state.view === 'server';
@@ -291,7 +469,13 @@ function render() {
   const selected = isServer ? null : state.tasks.find((t) => t.id === state.selected);
   const mainHtml = isServer
     ? serverSettings()
-    : `<main><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>${esc(title)}</h1><p>${state.query ? `「${esc(state.query)}」の検索結果` : `${active.length} 件の項目${state.view === 'today' ? ' · ' + new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' }) : ''}`}</p></div></div><div class="toolbar"><label class="toolbar-sort"><span class="sr-only">並び替え</span><select id="sort" class="control"><option value="manual">手動順</option><option value="created">追加順</option><option value="important">重要度順</option><option value="due">期限順</option><option value="title">名前順</option></select></label><button type="button" class="icon-button" data-menu aria-label="リストメニュー">•••</button>${state.menu ? `<div class="menu"><button type="button" data-toggle-done>${state.showDone ? '完了済みを隠す' : '完了済みを表示'}</button>${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" data-rename>リスト名を変更</button>' : ''}${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" class="danger" data-delete-list>リストを削除</button>' : ''}</div>` : ''}</div></header><section class="task-list" aria-label="タスク一覧">${active.map(row).join('')}${!active.length && !done.length ? '<div class="empty"><p>項目がありません</p></div>' : ''}${done.length ? `<button class="completed-toggle" data-toggle-done>${state.showDone ? '⌄' : '›'} 完了済み <small>${done.length}</small></button>${state.showDone ? done.map(row).join('') : ''}` : ''}</section>${composer()}</main>`;
+    : `<main><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>${esc(title)}</h1><p>${state.query ? `「${esc(state.query)}」の検索結果` : `${active.length} 件の項目`}</p></div></div><div class="toolbar"><label class="toolbar-sort"><span class="sr-only">並び替え</span><select id="sort" class="control">${Object.entries(
+        sorts,
+      )
+        .map(([value, name]) => `<option value="${value}">${name}</option>`)
+        .join(
+          '',
+        )}</select></label><button type="button" class="icon-button" data-menu aria-label="リストメニュー">•••</button>${state.menu ? `<div class="menu"><button type="button" data-toggle-done>${state.showDone ? '完了済みを隠す' : '完了済みを表示'}</button>${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" data-rename>リスト名を変更</button>' : ''}${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" class="danger" data-delete-list>リストを削除</button>' : ''}</div>` : ''}</div></header><section class="task-list" aria-label="タスク一覧">${active.map(row).join('')}${!active.length && !done.length ? (state.query ? '<div class="empty"><p>一致する項目はありません</p></div>' : '<div class="empty"><p>まだ項目がありません</p><small>下の入力欄からタスク・メモ・表を追加できます</small></div>') : ''}${done.length ? `<button class="completed-toggle" data-toggle-done>${state.showDone ? '⌄' : '›'} 完了済み <small>${done.length}</small></button>${state.showDone ? done.map(row).join('') : ''}` : ''}</section>${composer()}</main>`;
   $('#app').innerHTML =
     `<aside class="sidebar ${state.mobile ? 'mobile-open' : ''}"><div class="brand"><span>✓</span> EVERYDAY</div><div class="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" aria-label="タスクを検索" placeholder="検索" value="${esc(state.query)}" autocomplete="off" enterkeyhint="search">${state.query ? '<button type="button" class="icon-button" data-clear-search aria-label="検索をクリア">×</button>' : ''}</div><nav>${
       state.lists.some((l) => l.pinned)
@@ -305,7 +489,7 @@ function render() {
       .map(nav)
       .join(
         '',
-      )}</nav><button class="new-list" data-new-list>＋ <span>新しいリスト</span></button><button class="server-tab ${isServer ? 'active' : ''}" data-view="server"><span class="nav-icon server">${icons.server}</span><span>サーバー管理</span></button></aside>${mainHtml}${selected ? detail(selected) : ''}<dialog id="list-dialog"><form id="list-form" class="stack-form"><h2 id="dialog-title"></h2><label for="list-name">リスト名</label><input id="list-name" class="control" name="name" maxlength="100" required autocomplete="off"><div class="field-actions"><button type="button" class="btn" data-cancel>キャンセル</button><button class="save" type="submit">保存</button></div></form></dialog>`;
+      )}</nav><button class="new-list" data-new-list>＋ <span>新しいリスト</span></button><button class="server-tab ${isServer ? 'active' : ''}" data-view="server"><span class="nav-icon server">⚙</span><span>サーバー管理</span></button></aside>${state.mobile || selected ? `<div class="scrim ${state.mobile ? 'for-sidebar' : 'for-detail'}" data-scrim></div>` : ''}${mainHtml}${selected ? detail(selected) : ''}<dialog id="list-dialog"><form id="list-form" class="stack-form"><h2 id="dialog-title"></h2><label for="list-name">リスト名</label><input id="list-name" class="control" name="name" maxlength="100" required autocomplete="off"><div class="field-actions"><button type="button" class="btn" data-cancel>キャンセル</button><button class="save" type="submit">保存</button></div></form></dialog>`;
   if ($('#sort')) $('#sort').value = state.sort;
   bind();
 }
@@ -524,7 +708,9 @@ function bind() {
   if ($('.task-list'))
     bindReordering($('.task-list'), state.sort === 'manual', async (id, targetId, position) => {
       await run(async () => {
-        state.tasks = await api('/tasks/reorder', 'POST', { id, targetId, position });
+        state.tasks = withoutPendingDelete(
+          await api('/tasks/reorder', 'POST', { id, targetId, position }),
+        );
         render();
         document
           .querySelector('[data-item-id="' + id + '"] .task-content')
@@ -535,9 +721,9 @@ function bind() {
   document.querySelectorAll('[data-view]').forEach(
     (b) =>
       (b.onclick = () => {
+        closeDetail();
         state.view = b.dataset.view;
         state.query = '';
-        state.selected = null;
         state.menu = false;
         state.mobile = false;
         render();
@@ -564,6 +750,12 @@ function bind() {
   search.oninput = (e) => {
     if (!composingSearch && !e.isComposing) updateSearch();
   };
+  if ($('[data-scrim]'))
+    $('[data-scrim]').onclick = () => {
+      if (state.mobile) state.mobile = false;
+      else closeDetail();
+      render();
+    };
   if ($('[data-clear-search]'))
     $('[data-clear-search]').onclick = () => {
       state.query = '';
@@ -606,7 +798,8 @@ function bind() {
     $('#server-form').onsubmit = (e) => {
       e.preventDefault();
       const values = new FormData(e.currentTarget);
-      sessionStorage.setItem(
+      sessionStorage.removeItem(serverProfileKey());
+      localStorage.setItem(
         serverProfileKey(),
         JSON.stringify({
           name: values.get('name').trim(),
@@ -617,6 +810,7 @@ function bind() {
       toast('サーバー表示を保存しました');
     };
     $('[data-reset-server]').onclick = () => {
+      localStorage.removeItem(serverProfileKey());
       sessionStorage.removeItem(serverProfileKey());
       render();
     };
@@ -625,30 +819,27 @@ function bind() {
   }
   $('#sort').onchange = (e) => {
     state.sort = e.target.value;
+    savePrefs();
     render();
   };
   document.querySelectorAll('[data-check]').forEach(
     (b) =>
       (b.onclick = () =>
-        run(() =>
-          patch(b.dataset.check, {
-            completed: !state.tasks.find((t) => t.id === b.dataset.check).completed,
-          }),
-        )),
-  );
-  document.querySelectorAll('[data-star]').forEach(
-    (b) =>
-      (b.onclick = () =>
-        run(() =>
-          patch(b.dataset.star, {
-            important: !state.tasks.find((t) => t.id === b.dataset.star).important,
-          }),
-        )),
+        run(async () => {
+          const id = b.dataset.check;
+          const completed = !state.tasks.find((t) => t.id === id).completed;
+          await patch(id, { completed });
+          if (completed)
+            toast('完了にしました', {
+              label: '元に戻す',
+              run: () => run(() => patch(id, { completed: false })),
+            });
+        })),
   );
   document.querySelectorAll('[data-open]').forEach(
     (b) =>
       (b.onclick = () => {
-        state.selected = b.dataset.open;
+        openDetail(b.dataset.open);
         render();
       }),
   );
@@ -665,6 +856,7 @@ function bind() {
       (b.onclick = () => {
         state.showDone = !state.showDone;
         state.menu = false;
+        savePrefs();
         render();
       }),
   );
@@ -767,9 +959,6 @@ function bind() {
           ...payload,
           kind: mode,
           listId: smartView ? 'inbox' : state.view,
-          important: state.view === 'important',
-          myDay: state.view === 'today' ? today() : '',
-          dueDate: state.view === 'planned' ? today() : '',
         });
         state.tasks.push(task);
         state.query = '';
@@ -785,25 +974,26 @@ function bind() {
   const t = state.tasks.find((t) => t.id === state.selected);
   if (!t) return;
   $('[data-close]').onclick = () => {
-    state.selected = null;
+    closeDetail();
     render();
   };
+  const draft = draftFor(t);
+  for (const field of ['title', 'note']) {
+    const input = $('#' + field);
+    if (!input) continue;
+    input.oninput = () => {
+      draft[field] = input.value;
+    };
+    input.onchange = () => saveDraft(field);
+  }
   if ($('#title-form'))
     $('#title-form').onsubmit = (e) => {
       e.preventDefault();
-      run(() => patch(t.id, { title: $('#title').value }));
+      saveDraft('title');
     };
-  $('#note-form').onsubmit = (e) => {
-    e.preventDefault();
-    run(async () => {
-      await patch(t.id, { note: $('#note').value });
-      toast('メモを保存しました');
-    });
-  };
+  $('#note-form').onsubmit = (e) => e.preventDefault();
   $('#due').onchange = (e) => run(() => patch(t.id, { dueDate: e.target.value }));
   $('#move').onchange = (e) => run(() => patch(t.id, { listId: e.target.value }));
-  $('[data-day]').onclick = () =>
-    run(() => patch(t.id, { myDay: t.myDay === today() ? '' : today() }));
   if ($('#step-form'))
     $('#step-form').onsubmit = (e) => {
       e.preventDefault();
@@ -834,66 +1024,66 @@ function bind() {
           run(() => patch(t.id, { steps: t.steps.filter((s) => s.id !== b.dataset.removeStep) }))),
     );
   if ($('#cells-form')) {
-    const draft = [...t.cells];
-    const capture = () =>
-      document.querySelectorAll('#edit-cells input').forEach((input, i) => {
-        draft[i] = input.value;
-      });
-    const bindColumns = () => {
-      $('#edit-cells [data-add-column]').onclick = () => {
-        if (draft.length >= 20) return;
-        capture();
-        draft.push('');
-        redraw();
-        $('#edit-cells .cell-input:last-of-type input')?.focus();
-      };
-      document.querySelectorAll('#edit-cells input').forEach(
-        (input) =>
-          (input.onkeydown = (e) => {
-            if (e.key === 'Enter' && e.altKey && !e.isComposing && e.keyCode !== 229) {
-              e.preventDefault();
-              if (draft.length >= 20) return;
-              capture();
-              draft.push('');
-              redraw();
-              $('#edit-cells .cell-input:last-of-type input')?.focus();
-            }
-          }),
-      );
-      document.querySelectorAll('#edit-cells [data-remove-column]').forEach(
-        (button) =>
-          (button.onclick = () => {
-            if (draft.length <= 1) return;
-            capture();
-            const index = Number(button.dataset.removeColumn);
-            draft.splice(index, 1);
-            redraw();
-            document
-              .querySelectorAll('#edit-cells input')
-              [Math.min(index, draft.length - 1)]?.focus();
-          }),
-      );
+    const addColumn = () => {
+      if (draft.cells.length >= 20) return;
+      draft.cells.push('');
+      render();
+      $('#edit-cells .cell-input:last-of-type input')?.focus();
     };
-    const redraw = () => {
-      $('#edit-cells').innerHTML = cellInputs(draft, '編集する行');
-      bindColumns();
-    };
-    bindColumns();
     $('#cells-form').onsubmit = (e) => {
       e.preventDefault();
-      capture();
-      run(() => patch(t.id, { cells: [...draft] }));
+      saveDraft('cells');
     };
+    $('#edit-cells [data-add-column]').onclick = addColumn;
+    document.querySelectorAll('#edit-cells [data-cell-index]').forEach((input) => {
+      input.oninput = () => {
+        draft.cells[Number(input.dataset.cellIndex)] = input.value;
+      };
+      input.onchange = () => saveDraft('cells');
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter' && e.altKey && !e.isComposing && e.keyCode !== 229) {
+          e.preventDefault();
+          addColumn();
+        }
+      };
+    });
+    document.querySelectorAll('#edit-cells [data-remove-column]').forEach(
+      (button) =>
+        (button.onclick = () => {
+          if (draft.cells.length <= 1) return;
+          const index = Number(button.dataset.removeColumn);
+          draft.cells.splice(index, 1);
+          saveDraft('cells');
+          render();
+          document
+            .querySelectorAll('#edit-cells input')
+            [Math.min(index, draft.cells.length - 1)]?.focus();
+        }),
+    );
   }
-  $('[data-delete-task]').onclick = () => {
-    if (confirm('この項目を削除しますか？'))
-      run(async () => {
-        await api('/tasks/' + t.id, 'DELETE');
-        state.selected = null;
-        await refresh();
-      });
-  };
+  $('[data-delete-task]').onclick = () => deleteTask(t);
 }
+// Escape closes the innermost open layer; dialogs and the list menu handle their own.
+document.addEventListener('keydown', (e) => {
+  if (
+    e.key !== 'Escape' ||
+    e.defaultPrevented ||
+    e.isComposing ||
+    document.querySelector('dialog[open], .list-context-menu')
+  )
+    return;
+  if (state.menu) state.menu = false;
+  else if (state.mobile) state.mobile = false;
+  else if (state.selected) closeDetail();
+  else return;
+  render();
+});
+document.addEventListener('pointerdown', (e) => {
+  if (state.menu && !e.target.closest('.toolbar')) {
+    state.menu = false;
+    render();
+  }
+});
 $('#app').innerHTML = '<div class="loading">読み込み中…</div>';
 if (token && backend) {
   refresh().catch((error) => {

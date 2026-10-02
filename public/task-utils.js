@@ -16,36 +16,42 @@ export function escapeHtml(value) {
   );
 }
 
-export function tasksForView(tasks, view, currentDay = today()) {
-  return tasks.filter((task) =>
-    view === 'today'
-      ? task.myDay === currentDay
-      : view === 'important'
-        ? task.important
-        : view === 'planned'
-          ? Boolean(task.dueDate)
-          : task.listId === view,
-  );
+export function tasksForView(tasks, listId) {
+  return tasks.filter((task) => task.listId === listId);
 }
 
-export function visibleTasks(tasks, { view, query = '', sort = 'created', currentDay = today() }) {
+// Memos and table rows have no title, so name order falls back to their visible text.
+export const entryText = (task) =>
+  task.title || task.note || (task.cells || []).filter(Boolean).join(' ');
+
+const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+export function formatDue(dueDate, currentDay = today()) {
+  const [y, m, d] = dueDate.split('-').map(Number);
+  const [cy, cm, cd] = currentDay.split('-').map(Number);
+  const days = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(cy, cm - 1, cd)) / 86400000);
+  if (days === 0) return '今日';
+  if (days === 1) return '明日';
+  if (days === -1) return '昨日';
+  const weekday = weekdays[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${y === cy ? '' : y + '/'}${m}/${d}(${weekday})`;
+}
+
+export function visibleTasks(tasks, { view, query = '', sort = 'created' }) {
   const matches = query
     ? tasks.filter((task) =>
         `${task.title} ${task.note} ${(task.cells || []).join(' ')}`
           .toLocaleLowerCase()
           .includes(query.toLocaleLowerCase()),
       )
-    : tasksForView(tasks, view, currentDay);
+    : tasksForView(tasks, view);
   const sorted = [...matches].sort((a, b) =>
     sort === 'manual'
       ? (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
       : sort === 'title'
-        ? a.title.localeCompare(b.title, 'ja')
-        : sort === 'important'
-          ? Number(b.important) - Number(a.important)
-          : sort === 'due'
-            ? (a.dueDate || '9999').localeCompare(b.dueDate || '9999')
-            : a.createdAt.localeCompare(b.createdAt),
+        ? entryText(a).localeCompare(entryText(b), 'ja')
+        : sort === 'due'
+          ? (a.dueDate || '9999').localeCompare(b.dueDate || '9999')
+          : a.createdAt.localeCompare(b.createdAt),
   );
   return {
     active: sorted.filter((task) => !task.completed),

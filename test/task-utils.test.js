@@ -6,6 +6,8 @@ import {
   tasksForView,
   visibleTasks,
   orderedLists,
+  entryText,
+  formatDue,
 } from '../public/task-utils.js';
 import { entryKind, entryCells } from '../src/entry-validation.js';
 
@@ -63,24 +65,41 @@ const tasks = [
   },
 ];
 
-test('smart views use the supplied local day and task flags', () => {
-  assert.deepEqual(
-    tasksForView(tasks, 'today', '2026-09-28').map((t) => t.id),
-    ['a'],
-  );
-  assert.deepEqual(
-    tasksForView(tasks, 'important').map((t) => t.id),
-    ['b', 'c'],
-  );
-  assert.deepEqual(
-    tasksForView(tasks, 'planned').map((t) => t.id),
-    ['b', 'c'],
-  );
+test('list views only contain entries from that list', () => {
   assert.deepEqual(
     tasksForView(tasks, 'ideas').map((t) => t.id),
     ['a', 'c'],
   );
   assert.equal(today(new Date(2026, 0, 2, 23, 59)), '2026-01-02');
+});
+
+test('name order uses memo text and table cells when there is no title', () => {
+  const entries = [
+    { id: 't', listId: 'x', kind: 'task', title: 'いちご', note: '', cells: [], createdAt: '1' },
+    { id: 'm', listId: 'x', kind: 'memo', title: '', note: 'あめ', cells: [], createdAt: '2' },
+    {
+      id: 'r',
+      listId: 'x',
+      kind: 'table',
+      title: '',
+      note: '',
+      cells: ['', 'うどん'],
+      createdAt: '3',
+    },
+  ];
+  assert.deepEqual(
+    visibleTasks(entries, { view: 'x', sort: 'title' }).active.map((t) => t.id),
+    ['m', 't', 'r'],
+  );
+  assert.equal(entryText(entries[2]), 'うどん');
+});
+
+test('due dates read relative to the local day', () => {
+  assert.equal(formatDue('2026-10-02', '2026-10-02'), '今日');
+  assert.equal(formatDue('2026-10-03', '2026-10-02'), '明日');
+  assert.equal(formatDue('2026-10-01', '2026-10-02'), '昨日');
+  assert.equal(formatDue('2026-10-05', '2026-10-02'), '10/5(月)');
+  assert.equal(formatDue('2027-01-04', '2026-10-02'), '2027/1/4(月)');
 });
 
 test('search spans lists and notes, then splits completion without mutating input', () => {

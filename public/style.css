@@ -1975,3 +1975,67 @@ input[type='date'].control {
 .composer .mode-switch button[aria-pressed='false']:hover {
   background: #333;
 }
+/* Detail panel saves on blur, so fields sit without per-field save buttons. */
+.detail #title {
+  min-height: 0;
+  padding: 10px 12px;
+}
+#step-form .save {
+  white-space: nowrap;
+}
+.task-content small.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.list-badge {
+  color: #c8c8c8;
+}
+.empty small {
+  color: #8a8a8a;
+  font-size: 12px;
+}
+.server-panel h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.server-panel .field-hint + .server-preview {
+  margin-top: 16px;
+}
+#toast {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+#toast.visible {
+  pointer-events: auto;
+}
+#toast button {
+  color: var(--accent);
+  font-weight: 650;
+  padding: 2px 4px;
+}
+.scrim {
+  display: none;
+}
+@media (max-width: 800px) {
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: #0009;
+    z-index: 4;
+  }
+  .scrim.for-detail {
+    z-index: 5;
+  }
+}
+/* Keep the toast clear of the composer so undo never covers the add field. */
+#toast {
+  bottom: 128px;
+  max-width: calc(100vw - 32px);
+}
+#note-form label {
+  margin-bottom: 0;
+}

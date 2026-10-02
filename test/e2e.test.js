@@ -136,10 +136,15 @@ test(
       const task = page.locator('article.task').filter({ hasText: 'E2E テストのタスク' });
       await task.waitFor();
       await task.getByRole('button', { name: 'E2E テストのタスク' }).click();
+      // Detail edits save without a button once the field loses focus or the panel closes.
       await page.getByRole('textbox', { name: 'メモ' }).fill('再読み込みしても残る');
-      await page.getByRole('button', { name: 'メモを保存' }).click();
-      await page.getByRole('button', { name: '今日の予定に追加' }).click();
-      await task.getByRole('button', { name: '重要マークを切り替える' }).click();
+      const noteSaved = page.waitForResponse(
+        (response) => response.request().method() === 'PATCH' && response.ok(),
+      );
+      await page.keyboard.press('Escape');
+      await noteSaved;
+      assert.equal(await page.locator('.detail').count(), 0);
+      assert.equal(await page.locator('[data-star], [data-day]').count(), 0);
       await page.reload();
       await page.getByRole('heading', { name: 'マイタスク', exact: true }).waitFor();
       await task.getByRole('button', { name: 'E2E テストのタスク' }).click();
@@ -225,8 +230,10 @@ test(
       await table.getByRole('button', { name: '表の行を編集' }).click();
       await page.getByRole('textbox', { name: '編集する行 2列目', exact: true }).fill('250円');
       await page.getByRole('button', { name: '編集する行 4列目を削除', exact: true }).click();
-      await page.getByRole('button', { name: '行を保存', exact: true }).click();
       await table.getByText('250円', { exact: true }).waitFor();
+      await page.waitForFunction(
+        () => document.querySelectorAll('article.entry-table .table-cell').length === 3,
+      );
       await page.reload();
       await memo.waitFor();
       await table.getByText('250円', { exact: true }).waitFor();
@@ -259,6 +266,15 @@ test(
       await page.getByRole('textbox', { name: 'タスクを検索' }).fill('スーパー');
       await table.waitFor();
       assert.equal(await page.locator('article.task').count(), 1);
+      assert.equal(await table.locator('.list-badge').textContent(), '💼 マイタスク');
+      await page.getByRole('textbox', { name: 'タスクを検索' }).fill('');
+      // Deleting waits for the undo window, so undo restores the row without a server call.
+      await memo.getByRole('button').first().click();
+      await page.getByRole('button', { name: 'メモを削除' }).click();
+      await page.getByRole('button', { name: '元に戻す' }).click();
+      await memo.waitFor();
+      await page.reload();
+      await memo.waitFor();
       // Narrow screens keep mode buttons and column inputs reachable.
       await page.setViewportSize({ width: 390, height: 844 });
       await modes.getByRole('button', { name: '表' }).click();
