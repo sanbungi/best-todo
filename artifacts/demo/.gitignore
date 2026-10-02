@@ -1,0 +1,8 @@
+# Generated media and timing metadata; keep scripts and the manual in Git.
+*.mp4
+*.webm
+*.png
+*.ass
+chapters.json
+chapters.ffmeta
+recordings/
