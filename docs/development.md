@@ -120,12 +120,12 @@ cd android
 
 ## CI / リリース
 
-| Workflow                       | トリガー                  | 内容                                                                                                                                      |
-| ------------------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci.yml`     | 全ブランチへのpush・PR    | `format:check`、`npm test`、Electron起動テスト（xvfb）、AndroidのJUnitテスト                                                              |
-| `.github/workflows/build.yml`  | `v*` タグのpush・手動実行 | CI通過後、Windows / Linux / Android をビルド（Linux版は起動確認付き）、GHCRへイメージ公開、タグ時は `SHA256SUMS` 付きでGitHub Release作成 |
-| `.github/workflows/deploy.yml` | mainへのpush・手動実行    | CI通過後、GHCRへイメージ公開し、CapRoverへデプロイ（[設定](self-hosting.md#github-actionsから自動デプロイする)）                          |
-| `.github/workflows/images.yml` | 他workflowから呼び出し    | backend / frontend のイメージをビルドしてGHCRへpush                                                                                       |
+| Workflow                       | トリガー                                       | 内容                                                                                                                                                          |
+| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`     | PR・手動実行・他workflowから呼び出し           | `format:check`、`npm test`、Electron起動テスト（xvfb）、AndroidのJUnitテスト。PR・pushでは変更パスに応じて不要なジョブをスキップ（`format:check` は常に実行） |
+| `.github/workflows/build.yml`  | `v*` タグのpush・手動実行                      | CI通過後、Windows / Linux / Android をビルド（Linux版は起動確認付き）、GHCRへイメージ公開、タグ時は `SHA256SUMS` 付きでGitHub Release作成                     |
+| `.github/workflows/deploy.yml` | mainへのpush（docsのみの変更は除く）・手動実行 | CI通過後、GHCRへイメージ公開し、CapRoverへデプロイ（[設定](self-hosting.md#github-actionsから自動デプロイする)）                                              |
+| `.github/workflows/images.yml` | 他workflowから呼び出し                         | backend / frontend のイメージをビルドしてGHCRへpush                                                                                                           |
 
 ```sh
 git tag v1.2.3 && git push origin v1.2.3

@@ -1,8 +1,8 @@
 name: CI
+# mainへのpushはdeploy.ymlから、v*タグはbuild.ymlから呼び出される
 on:
-  push:
-    branches: ['**']
   pull_request:
+  workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
@@ -10,7 +10,51 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # 変更されたファイルから、実行が必要なジョブを判定する
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      # 判定しないイベント（タグ・手動実行）では全て実行する
+      node: ${{ steps.filter.outputs.node || 'true' }}
+      android: ${{ steps.filter.outputs.android || 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/'))
+        with:
+          # 呼び出し元にpull-requests権限を要求しないよう、APIではなくgitで差分を取る
+          token: ''
+          filters: |
+            node:
+              - 'package.json'
+              - 'package-lock.json'
+              - 'server.js'
+              - 'src/**'
+              - 'public/**'
+              - 'electron/**'
+              - 'test/**'
+              - 'Dockerfile.*'
+              - '.github/workflows/**'
+            android:
+              - 'android/**'
+              - '.github/workflows/**'
+
+  # docsのみの変更でも整形は確認する。electron等のダウンロードを避けるため --ignore-scripts
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run format:check
+
   node:
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +63,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run format:check
       - run: npx playwright install --with-deps chrome
       - run: npm test
       - name: Electron (xvfb)
         run: xvfb-run -a npm run test:desktop
+
   android:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:

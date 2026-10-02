@@ -2,6 +2,13 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # ドキュメントのみの変更ではテスト・イメージビルド・デプロイを行わない
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'artifacts/**'
+      - 'LICENSE'
+      - '.gitignore'
   workflow_dispatch:
 permissions:
   contents: read
