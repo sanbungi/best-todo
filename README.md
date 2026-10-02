@@ -30,9 +30,9 @@
 
 ## 📥 入手
 
-| プラットフォーム | 入手方法                                                                  |
-| ---------------- | ------------------------------------------------------------------------- |
-| Web              | 自分のサーバーにデプロイ（[セルフホスト](docs/self-hosting.md)）          |
+| プラットフォーム | 入手方法                                                                     |
+| ---------------- | ---------------------------------------------------------------------------- |
+| Web              | 自分のサーバーにデプロイ（[セルフホスト](docs/self-hosting.md)）             |
 | Windows          | [Releases](https://github.com/sanbungi/best-todo/releases) のインストーラー  |
 | Linux            | [Releases](https://github.com/sanbungi/best-todo/releases) の AppImage / deb |
 | Android          | [Releases](https://github.com/sanbungi/best-todo/releases) の APK            |
