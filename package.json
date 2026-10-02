@@ -5,6 +5,7 @@
   "description": "日本語のTo Doデスクトップクライアント",
   "author": "Best ToDo contributors",
   "main": "electron/main.js",
+  "desktopName": "best-todo.desktop",
   "build": {
     "appId": "com.besttodo.desktop",
     "productName": "Best ToDo",
@@ -12,6 +13,7 @@
     "directories": {
       "output": "dist"
     },
+    "artifactName": "best-todo-${version}-${arch}.${ext}",
     "files": [
       "electron/**",
       "public/**",
@@ -32,7 +34,18 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "artifactName": "best-todo-setup-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "executableName": "best-todo",
+      "maintainer": "Best ToDo contributors",
+      "syncDesktopName": true
     }
   },
   "type": "module",
@@ -43,15 +56,16 @@
     "start": "node --env-file-if-exists=.env server.js",
     "desktop": "electron .",
     "dev:desktop": "electron . --dev",
-    "pack:desktop": "electron-builder --win --dir",
-    "build:desktop": "electron-builder --win",
+    "pack:desktop": "electron-builder --dir",
+    "build:desktop:win": "electron-builder --win",
+    "build:desktop:linux": "electron-builder --linux",
     "test:desktop": "node --test test/desktop.test.js",
     "test:frontend": "node --test test/frontend.test.js",
     "dev": "node --env-file=.env --watch server.js",
     "start:frontend": "node src/frontend.js",
     "dev:frontend": "node --watch src/frontend.js",
     "test": "npm run test:unit && npm run test:frontend && npm run test:api && npm run test:e2e",
-    "test:unit": "node --test test/task-utils.test.js",
+    "test:unit": "node --test test/task-utils.test.js test/csv.test.js",
     "test:api": "node --test test/api.test.js",
     "test:e2e": "node --test test/e2e.test.js",
     "format": "prettier --write .",

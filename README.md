@@ -29,10 +29,13 @@ npm run dev
 - Android側は `usesCleartextTraffic=false`、WebViewもmixed content禁止です。本番バックエンドはHTTPSで指定してください。
 
 ```sh
-# Android SDK / Gradle がある環境で実行
+# Android SDK / JDK 17以上がある環境で実行
 cd android
-gradle :app:assembleDebug
+./gradlew assembleDebug      # 開発用（httpのバックエンドにも接続可）
+./gradlew testDebugUnitTest  # アセット配信処理のテスト
 ```
+
+バージョンは `package.json` の `version` から決まります（versionCodeは `major*10000+minor*100+patch`）。release APKは環境変数 `ANDROID_KEYSTORE_FILE` などでkeystoreを指定すると、その鍵で署名されます。未指定の場合はdebug鍵で署名されます。
 
 Android Studioで `android/` を開いてビルドすることもできます。初回はAndroid Gradle Plugin等のダウンロードにネット接続が必要です。
 
@@ -62,15 +65,17 @@ CORS_ORIGINS=https://todo.example.com,http://127.0.0.1:17880
 - `dev:desktop` では `public/` の保存で自動再読み込み（未保存の入力は失われます）。Electron本体や配信処理を変更した場合は再起動します。
 - 配布版にはビルド時点の `public/` を同梱。画面更新の配布には再ビルド・再インストールが必要です。Webサイトの更新を遠隔で取り込む機能や自動アップデートは実装していません。
 
-### Windows用ビルド
+### Windows / Linux用ビルド
 
-Windows上で実行します（x64）。初回はElectron・NSIS等のダウンロードにネット接続が必要です。
+Windows版（NSIS、x64）はWindows上、Linux版（AppImage・deb）はLinux上で実行します。初回はElectron・NSIS等のダウンロードにネット接続が必要です。
 
 ```sh
-npm run pack:desktop   # dist/win-unpacked/ に実行可能なフォルダを生成
-npm run build:desktop  # dist/ にNSISインストーラーを生成
-npm run test:frontend # 共通の静的配信テスト
-npm run test:desktop  # 実際のElectron起動テスト（GUI環境が必要）
+npm run pack:desktop         # dist/<os>-unpacked/ に実行可能なフォルダを生成
+npm run build:desktop:win    # dist/ にNSISインストーラーを生成
+npm run build:desktop:linux  # dist/ にAppImageとdebを生成
+npm run test:desktop         # 実際のElectron起動テスト（GUI環境が必要。Linuxのヘッドレス環境では xvfb-run -a を付ける）
+# パッケージ済みアプリを検証する場合
+DESKTOP_EXECUTABLE=dist/linux-unpacked/best-todo npm run test:desktop
 ```
 
 コード署名は未設定なので、配布先ではSmartScreenの警告が出ることがあります。`data/`、`.env`、APIサーバーは同梱しません。SQLiteは引き続きバックエンドで管理されます。認証トークンはWeb版と同じsessionStorageで、アプリ終了後は再ログインします。
@@ -110,14 +115,32 @@ seedはトランザクション内で一度だけ適用され、削除済みサ�
 
 Backend URLはブラウザから到達可能な公開URLです。CapRover内部のサービス名は指定しません。CORSには実際に利用するフロントエンドのスキーム・ホスト・ポートを正確に指定してください。本番の認証情報をHTTPで送らないでください。
 
-### GitHub Actions → GHCR → CapRover
+### GitHub Actions
 
-`.github/workflows/images.yml` がテスト後に2イメージをビルドします。PRではビルドのみ、mainへのpush・`v*`タグ・手動実行ではGHCRへ公開します。`GITHUB_TOKEN` のpackages write権限を使用し、アプリの認証情報をビルドへ渡す必要はありません。
+- `.github/workflows/ci.yml`（全ブランチへのpush・PR）：`format:check`、`npm test`、Electron起動テスト（xvfb）、AndroidのJUnitテスト。
+- `.github/workflows/build.yml`（`v*` タグのpush・手動実行）：CIを通ったあとで次を行います。
+  - Windowsインストーラー、Linux AppImage/deb、Android APKをビルドし、Actionsのartifactに保存します。Linux版は、パッケージ済みのアプリを実際に起動して確認します。
+  - backend/frontendのイメージをGHCRへ公開します。
+  - タグの場合は全成果物と `SHA256SUMS` を添えてGitHub Releaseを作成します。`-` を含むタグ（例: `v1.2.0-rc.1`）はprereleaseになります。
+
+リリースの手順は `git tag v1.2.3 && git push origin v1.2.3` です。タグからバージョンが決まるため、CI内で `package.json` とAndroidのversionName/versionCodeがそのタグの値になります。コミットはされません。
+
+Androidのrelease APKを常に同じ鍵で署名するには、リポジトリのSecretsに次の4つを登録します。未登録の場合は実行のたびに異なるdebug鍵で署名されるため、更新時にアンインストールが必要です。
+
+```sh
+keytool -genkeypair -v -keystore release.jks -alias besttodo -keyalg RSA -keysize 4096 -validity 10000
+gh secret set ANDROID_KEYSTORE_BASE64 < <(base64 -w0 release.jks)
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body besttodo
+gh secret set ANDROID_KEY_PASSWORD
+```
+
+GHCRに公開されるイメージは次のとおりです。
 
 - `ghcr.io/<owner>/<repository>-backend:sha-<完全なcommit SHA>`
 - `ghcr.io/<owner>/<repository>-frontend:sha-<完全なcommit SHA>`
 
-名前は小文字です。mainでは `latest`、リリースタグではそのタグも付きます。運用では変更されないSHAタグを推奨します。
+名前は小文字です。タグ時とmainでの手動実行では `latest` が付き、タグ時はバージョン（例: `1.2.3`）も付きます。運用では変更されないSHAタグを推奨します。
 CapRoverの各アプリのDeploymentで対応するイメージ名を指定してデプロイしてください。非公開GHCRの場合はCapRoverにGHCRレジストリ認証（read:packagesを持つ資格情報）を設定します。Actionsからの本番自動デプロイは行いません。
 
 ソースからCapRoverでビルドする場合は、各アプリでCaptain Definitionのパスに `captain-definition.backend` / `captain-definition.frontend` を指定できます。

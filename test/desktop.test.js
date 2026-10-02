@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 
 const root = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
+// DESKTOP_EXECUTABLE を指定するとパッケージ済みアプリ（electron-builder --dir の出力）を検証する
+const executablePath = process.env.DESKTOP_EXECUTABLE;
 
 test(
   'Electron loads the shared UI in a sandbox and releases its server on exit',
@@ -15,7 +17,11 @@ test(
     const userData = await mkdtemp(path.join(os.tmpdir(), 'todo-desktop-'));
     let desktop;
     try {
-      desktop = await electron.launch({ args: [root, `--user-data-dir=${userData}`] });
+      desktop = await electron.launch(
+        executablePath
+          ? { executablePath, args: [`--user-data-dir=${userData}`] }
+          : { args: [root, `--user-data-dir=${userData}`] },
+      );
       const page = await desktop.firstWindow();
       await page.getByRole('button', { name: 'ログイン', exact: true }).waitFor();
       assert.equal(new URL(page.url()).origin, 'http://127.0.0.1:17880');

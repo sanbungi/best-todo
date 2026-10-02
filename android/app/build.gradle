@@ -1,6 +1,14 @@
+import groovy.json.JsonSlurper
+
 plugins {
     id 'com.android.application'
 }
+
+// バージョンは package.json を正とする（CIではタグから package.json を更新する）
+def appVersion = new JsonSlurper().parse(file('../../package.json')).version
+def (major, minor, patch) = appVersion.tokenize('.-')*.toInteger()
+// 署名用keystoreは環境変数で渡す。未指定ならdebug鍵で署名する（個人利用向け）
+def keystorePath = System.getenv('ANDROID_KEYSTORE_FILE')
 
 android {
     namespace 'com.besttodo.android'
@@ -10,9 +18,30 @@ android {
         applicationId 'com.besttodo.android'
         minSdk 24
         targetSdk 35
-        versionCode 1
-        versionName '1.0.0'
+        versionCode major * 10000 + minor * 100 + patch
+        versionName appVersion
     }
+
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
 }
 
 tasks.register('syncFrontendAssets', Copy) {
