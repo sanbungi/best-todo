@@ -40,7 +40,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "start": "node server.js",
+    "start": "node --env-file-if-exists=.env server.js",
     "desktop": "electron .",
     "dev:desktop": "electron . --dev",
     "pack:desktop": "electron-builder --win --dir",
