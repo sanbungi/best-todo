@@ -28,7 +28,8 @@ android {
                 storeFile file(keystorePath)
                 storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
                 keyAlias System.getenv('ANDROID_KEY_ALIAS')
-                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+                // PKCS12（keytoolの既定）は鍵とkeystoreのパスワードが共通
+                keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
             }
         }
     }

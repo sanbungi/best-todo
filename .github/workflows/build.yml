@@ -68,15 +68,26 @@ jobs:
         if: env.HAS_KEYSTORE == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          keystore="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$keystore"
+          # ビルド前に検証し、どのSecretが誤っているかを明示する
+          if ! keytool -list -keystore "$keystore" -storepass "$ANDROID_KEYSTORE_PASSWORD" > /dev/null; then
+            echo "::error::keystoreを開けません。ANDROID_KEYSTORE_PASSWORD または ANDROID_KEYSTORE_BASE64 を確認してください"
+            exit 1
+          fi
+          if ! keytool -list -keystore "$keystore" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" > /dev/null; then
+            echo "::error::エイリアス '$ANDROID_KEY_ALIAS' がkeystoreにありません。ANDROID_KEY_ALIAS を確認してください"
+            exit 1
+          fi
+          echo "ANDROID_KEYSTORE_FILE=$keystore" >> "$GITHUB_ENV"
       - name: Build APK
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           ./gradlew assembleRelease
           version=$(node -p "require('../package.json').version")

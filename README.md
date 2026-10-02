@@ -125,15 +125,23 @@ Backend URLはブラウザから到達可能な公開URLです。CapRover内部�
 
 リリースの手順は `git tag v1.2.3 && git push origin v1.2.3` です。タグからバージョンが決まるため、CI内で `package.json` とAndroidのversionName/versionCodeがそのタグの値になります。コミットはされません。
 
-Androidのrelease APKを常に同じ鍵で署名するには、リポジトリのSecretsに次の4つを登録します。未登録の場合は実行のたびに異なるdebug鍵で署名されるため、更新時にアンインストールが必要です。
+Androidのrelease APKを常に同じ鍵で署名するには、リポジトリのSecretsに次の3つを登録します。未登録の場合は実行のたびに異なるdebug鍵で署名されるため、更新時にアンインストールが必要です。
 
 ```sh
-keytool -genkeypair -v -keystore release.jks -alias besttodo -keyalg RSA -keysize 4096 -validity 10000
-gh secret set ANDROID_KEYSTORE_BASE64 < <(base64 -w0 release.jks)
-gh secret set ANDROID_KEYSTORE_PASSWORD
-gh secret set ANDROID_KEY_ALIAS --body besttodo
-gh secret set ANDROID_KEY_PASSWORD
+# リポジトリ外に作成する（*.jks はgitignore済みだが、コミットしないこと）。対話入力は使わない
+umask 077
+openssl rand -base64 33 | tr -d '/+=\n' > ~/besttodo-release.password
+export STOREPASS="$(cat ~/besttodo-release.password)"
+keytool -genkeypair -keystore ~/besttodo-release.jks -alias besttodo -keyalg RSA -keysize 4096 \
+  -validity 10000 -storepass:env STOREPASS -dname "CN=Best ToDo"
+keytool -list -keystore ~/besttodo-release.jks -storepass:env STOREPASS -alias besttodo  # 開けるか確認
+# gh secret set は値を標準入力で渡すと対話入力を求めない（printf で末尾改行を付けない）
+base64 -w0 ~/besttodo-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
+printf '%s' "$STOREPASS" | gh secret set ANDROID_KEYSTORE_PASSWORD
+printf '%s' besttodo | gh secret set ANDROID_KEY_ALIAS
 ```
+
+PKCS12形式（keytoolの既定）では鍵のパスワードはkeystoreのパスワードと共通です。keystoreを失くすと同じ署名で更新できなくなるため、パスワードと一緒にバックアップしてください。
 
 GHCRに公開されるイメージは次のとおりです。
 

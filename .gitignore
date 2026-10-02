@@ -16,6 +16,8 @@ Thumbs.db
 /android/.idea/
 /android/**/build/
 /android/local.properties
+*.jks
+*.keystore
 /android/**/*.iml
 /android/.externalNativeBuild/
 /android/.cxx/
