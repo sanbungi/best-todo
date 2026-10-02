@@ -51,19 +51,14 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 24px;
+  padding: 8px 24px;
+  margin-bottom: 24px;
   color: #dedede;
 }
 .brand > span {
   font-size: 26px;
   color: #8e9dec;
   line-height: 1;
-}
-.brand small {
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: #777;
-  margin-left: auto;
 }
 .profile {
   display: flex;
@@ -94,7 +89,7 @@ textarea:focus-visible {
 .search {
   display: flex;
   align-items: center;
-  margin: 0 18px 22px;
+  margin: 0 20px 24px;
   border: 1px solid #454545;
   border-bottom-color: #777;
   border-radius: 6px;
@@ -1531,6 +1526,21 @@ dialog {
 .list-context-menu button:focus-visible {
   outline: 2px solid #a8b7f0;
   outline-offset: -2px;
+}
+#list-form .today-list-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  cursor: pointer;
+}
+.today-list-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+#list-name[readonly] {
+  color: #aaa;
 }
 .appearance-fields {
   display: grid;

@@ -1,6 +1,12 @@
 import { exportCsv, importCsv } from './csv.js';
 import { bindReordering } from './reorder.js';
-import { escapeHtml as esc, today, tasksForView, visibleTasks } from './task-utils.js';
+import {
+  escapeHtml as esc,
+  today,
+  tasksForView,
+  visibleTasks,
+  orderedLists,
+} from './task-utils.js';
 const $ = (s) => document.querySelector(s);
 const icons = {
   sun: '☀',
@@ -255,9 +261,22 @@ function serverSettings() {
   const expires = session?.currentSessionExpiresAt
     ? new Date(session.currentSessionExpiresAt).toLocaleString('ja-JP')
     : '取得中…';
-  return `<main class="server-main"><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>サーバー管理</h1><p>接続先、ログインセッション、CSVを管理します</p></div></div></header><section class="server-panel"><div class="server-preview"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><form id="server-form" class="stack-form"><label>ワークスペース名<input class="control" name="name" maxlength="80" value="${esc(profile.name)}" required autocomplete="organization"></label><label>ロゴ文字<input class="control" name="logo" maxlength="2" value="${esc(profile.logo)}" required autocapitalize="characters"></label><label>接続先<input class="control" value="${esc(backendOrigin())}" readonly></label><div class="field-actions"><button class="save" type="submit">保存</button><button type="button" class="btn" data-reset-server>接続先から自動設定</button><button type="button" class="btn btn-danger" data-change-server>接続先を変更</button></div></form></section><section class="server-panel"><h2>ログインセッション</h2><p class="field-hint">ログイン状態を維持する時間を設定します。変更後の新しいログインから適用されます。</p><div class="server-preview"><div><strong>${session ? `${session.activeSessions} セッション` : '取得中…'}</strong><small>現在のセッション期限: ${esc(expires)}</small></div></div><form id="session-form" class="stack-form"><label>ログイン維持時間（時間）<input class="control" name="sessionTtlHours" type="number" min="1" max="8760" step="1" value="${esc(String(session?.sessionTtlHours ?? 24))}" required></label><div class="field-actions"><button class="save" type="submit">セッション設定を保存</button><button type="button" class="btn btn-danger" data-revoke-sessions>他のセッションをログアウト</button></div></form></section><section class="server-panel"><h2>CSV 一括インポート／エクスポート</h2><p class="field-hint">全リストのタスク・メモ・表をUTF-8 CSVで保存します。インポートは追加のみ（再取込すると重複）。同名リストに追加し、存在しないリストは作成します。空のリストは対象外です。</p><button type="button" class="btn" data-export-csv>CSVをエクスポート</button><form id="csv-form" class="stack-form"><label>CSVファイル（UTF-8・最大5MB）<input class="control" type="file" name="csv" accept=".csv,text/csv" required></label><p class="field-hint">エクスポートしたCSVのヘッダーを使用してください。completed / important はtrueまたはfalse、日付はYYYY-MM-DD、cells / steps はJSON形式です。</p><button class="save" type="submit">CSVをインポート</button></form></section></main>`;
+  return `<main class="server-main"><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>サーバー管理</h1><p>接続先、ログインセッション、CSVを管理します</p></div></div></header><section class="server-panel"><div class="server-preview"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><form id="server-form" class="stack-form"><label>ワークスペース名<input class="control" name="name" maxlength="80" value="${esc(profile.name)}" required autocomplete="organization"></label><label>ロゴ文字<input class="control" name="logo" maxlength="2" value="${esc(profile.logo)}" required autocapitalize="characters"></label><label>接続先<input class="control" value="${esc(backendOrigin())}" readonly></label><div class="field-actions"><button class="save" type="submit">保存</button><button type="button" class="btn" data-reset-server>接続先から自動設定</button><button type="button" class="btn btn-danger" data-change-server>接続先を変更</button><button type="button" class="btn" data-logout>ログアウト</button></div></form></section><section class="server-panel"><h2>ログインセッション</h2><p class="field-hint">ログイン状態を維持する時間を設定します。変更後の新しいログインから適用されます。</p><div class="server-preview"><div><strong>${session ? `${session.activeSessions} セッション` : '取得中…'}</strong><small>現在のセッション期限: ${esc(expires)}</small></div></div><form id="session-form" class="stack-form"><label>ログイン維持時間（時間）<input class="control" name="sessionTtlHours" type="number" min="1" max="8760" step="1" value="${esc(String(session?.sessionTtlHours ?? 24))}" required></label><div class="field-actions"><button class="save" type="submit">セッション設定を保存</button><button type="button" class="btn btn-danger" data-revoke-sessions>他のセッションをログアウト</button></div></form></section><section class="server-panel"><h2>CSV 一括インポート／エクスポート</h2><p class="field-hint">全リストのタスク・メモ・表をUTF-8 CSVで保存します。インポートは追加のみ（再取込すると重複）。同名リストに追加し、存在しないリストは作成します。空のリストは対象外です。</p><button type="button" class="btn" data-export-csv>CSVをエクスポート</button><form id="csv-form" class="stack-form"><label>CSVファイル（UTF-8・最大5MB）<input class="control" type="file" name="csv" accept=".csv,text/csv" required></label><p class="field-hint">エクスポートしたCSVのヘッダーを使用してください。completed / important はtrueまたはfalse、日付はYYYY-MM-DD、cells / steps はJSON形式です。</p><button class="save" type="submit">CSVをインポート</button></form></section></main>`;
 }
+let renderedDay = today();
+setInterval(() => {
+  if (
+    today() !== renderedDay &&
+    token &&
+    $('.sidebar') &&
+    !document.querySelector('dialog[open]') &&
+    !document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')
+  )
+    render();
+}, 30000);
 function render() {
+  renderedDay = today();
+  const sidebarLists = orderedLists(state.lists, renderedDay);
   const isServer = state.view === 'server';
   const title = state.query
     ? '検索結果'
@@ -270,24 +289,23 @@ function render() {
         sort: state.sort,
       });
   const selected = isServer ? null : state.tasks.find((t) => t.id === state.selected);
-  const profile = serverProfile();
   const mainHtml = isServer
     ? serverSettings()
     : `<main><header><div class="heading"><button class="mobile-toggle" data-mobile aria-label="リストを表示">☰</button><div><h1>${esc(title)}</h1><p>${state.query ? `「${esc(state.query)}」の検索結果` : `${active.length} 件の項目${state.view === 'today' ? ' · ' + new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' }) : ''}`}</p></div></div><div class="toolbar"><label class="toolbar-sort"><span class="sr-only">並び替え</span><select id="sort" class="control"><option value="manual">手動順</option><option value="created">追加順</option><option value="important">重要度順</option><option value="due">期限順</option><option value="title">名前順</option></select></label><button type="button" class="icon-button" data-menu aria-label="リストメニュー">•••</button>${state.menu ? `<div class="menu"><button type="button" data-toggle-done>${state.showDone ? '完了済みを隠す' : '完了済みを表示'}</button>${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" data-rename>リスト名を変更</button>' : ''}${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" class="danger" data-delete-list>リストを削除</button>' : ''}</div>` : ''}</div></header><section class="task-list" aria-label="タスク一覧">${active.map(row).join('')}${!active.length && !done.length ? '<div class="empty"><p>項目がありません</p></div>' : ''}${done.length ? `<button class="completed-toggle" data-toggle-done>${state.showDone ? '⌄' : '›'} 完了済み <small>${done.length}</small></button>${state.showDone ? done.map(row).join('') : ''}` : ''}</section>${composer()}</main>`;
   $('#app').innerHTML =
-    `<aside class="sidebar ${state.mobile ? 'mobile-open' : ''}"><div class="brand"><span>✓</span> EVERYDAY <small>TO DO</small></div><div class="profile"><div class="avatar">${esc(profile.logo)}</div><div><strong>${esc(profile.name)}</strong><small>${esc(backendOrigin())}</small></div></div><div class="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" aria-label="タスクを検索" placeholder="タスク、メモ、表を検索" value="${esc(state.query)}" autocomplete="off" enterkeyhint="search">${state.query ? '<button type="button" class="icon-button" data-clear-search aria-label="検索をクリア">×</button>' : ''}</div><nav>${
+    `<aside class="sidebar ${state.mobile ? 'mobile-open' : ''}"><div class="brand"><span>✓</span> EVERYDAY</div><div class="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" aria-label="タスクを検索" placeholder="検索" value="${esc(state.query)}" autocomplete="off" enterkeyhint="search">${state.query ? '<button type="button" class="icon-button" data-clear-search aria-label="検索をクリア">×</button>' : ''}</div><nav>${
       state.lists.some((l) => l.pinned)
-        ? `<div class="list-caption">ピン留め</div>${state.lists
+        ? `<div class="list-caption">ピン留め</div>${sidebarLists
             .filter((l) => l.pinned)
             .map(nav)
             .join('')}<div class="divider"></div>`
         : ''
-    }<div class="list-caption">マイリスト <span>${state.lists.filter((l) => !l.pinned).length}</span></div>${state.lists
+    }<div class="list-caption">マイリスト <span>${state.lists.filter((l) => !l.pinned).length}</span></div>${sidebarLists
       .filter((l) => !l.pinned)
       .map(nav)
       .join(
         '',
-      )}</nav><button class="new-list" data-new-list>＋ <span>新しいリスト</span></button><button class="server-tab ${isServer ? 'active' : ''}" data-view="server"><span class="nav-icon server">${icons.server}</span><span>サーバー管理</span></button><div class="local-status" title="${esc(backend)}">バックエンドに保存 <button type="button" data-logout>ログアウト</button></div></aside>${mainHtml}${selected ? detail(selected) : ''}<dialog id="list-dialog"><form id="list-form" class="stack-form"><h2 id="dialog-title"></h2><label for="list-name">リスト名</label><input id="list-name" class="control" name="name" maxlength="100" required autocomplete="off"><div class="field-actions"><button type="button" class="btn" data-cancel>キャンセル</button><button class="save" type="submit">保存</button></div></form></dialog>`;
+      )}</nav><button class="new-list" data-new-list>＋ <span>新しいリスト</span></button><button class="server-tab ${isServer ? 'active' : ''}" data-view="server"><span class="nav-icon server">${icons.server}</span><span>サーバー管理</span></button></aside>${mainHtml}${selected ? detail(selected) : ''}<dialog id="list-dialog"><form id="list-form" class="stack-form"><h2 id="dialog-title"></h2><label for="list-name">リスト名</label><input id="list-name" class="control" name="name" maxlength="100" required autocomplete="off"><div class="field-actions"><button type="button" class="btn" data-cancel>キャンセル</button><button class="save" type="submit">保存</button></div></form></dialog>`;
   if ($('#sort')) $('#sort').value = state.sort;
   bind();
 }
@@ -301,6 +319,23 @@ function listDialog(list = null, appearance = false) {
       : '新しいリスト';
   $('#list-name').value = list?.name || '';
   form.querySelector('.appearance-fields')?.remove();
+  form.querySelector('.today-list-option')?.remove();
+  $('#list-name').readOnly = false;
+  if (!list) {
+    const option = document.createElement('label');
+    option.className = 'today-list-option';
+    option.innerHTML = '<input type="checkbox" name="todayList"> 今日のリストを作る';
+    form.insertBefore(option, form.querySelector('.field-actions'));
+    let manualName = '';
+    option.querySelector('input').onchange = (event) => {
+      const input = $('#list-name');
+      if (event.target.checked) {
+        manualName = input.value;
+        input.value = today().replaceAll('-', '/');
+      } else input.value = manualName;
+      input.readOnly = event.target.checked;
+    };
+  }
   if (appearance) {
     const fields = document.createElement('div');
     fields.className = 'appearance-fields';
@@ -319,6 +354,10 @@ function listDialog(list = null, appearance = false) {
   form.onsubmit = (event) => {
     event.preventDefault();
     const data = { name: $('#list-name').value };
+    if (!list && form.elements.todayList.checked) {
+      data.listDate = today();
+      data.name = data.listDate.replaceAll('-', '/');
+    }
     if (appearance)
       Object.assign(data, { icon: form.elements.icon.value, color: form.elements.color.value });
     const save = form.querySelector('[type="submit"]');
@@ -473,14 +512,15 @@ function bind() {
       });
     };
   }
-  $('[data-logout]').onclick = () =>
-    run(async () => {
-      try {
-        await api('/auth/logout', 'POST', {});
-      } finally {
-        showLogin();
-      }
-    });
+  if ($('[data-logout]'))
+    $('[data-logout]').onclick = () =>
+      run(async () => {
+        try {
+          await api('/auth/logout', 'POST', {});
+        } finally {
+          showLogin();
+        }
+      });
   if ($('.task-list'))
     bindReordering($('.task-list'), state.sort === 'manual', async (id, targetId, position) => {
       await run(async () => {

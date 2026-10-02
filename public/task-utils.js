@@ -1,6 +1,13 @@
 export const today = (now = new Date()) =>
   `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+// Keep creation order within each group; dated lists lose priority after their day.
+export function orderedLists(lists, currentDay = today()) {
+  const rank = (list) =>
+    list.listDate === currentDay ? 0 : list.listDate && list.listDate < currentDay ? 2 : 1;
+  return [...lists].sort((a, b) => rank(a) - rank(b));
+}
+
 export function escapeHtml(value) {
   return String(value).replace(
     /[&<>"']/g,

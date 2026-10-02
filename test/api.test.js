@@ -61,7 +61,7 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
     await start();
     assert.deepEqual(await req('/tasks'), []);
     assert.deepEqual(await req('/lists'), [
-      { id: 'inbox', name: 'マイタスク', pinned: 0, icon: '☰', color: '#6488d8' },
+      { id: 'inbox', name: 'マイタスク', pinned: 0, listDate: '', icon: '☰', color: '#6488d8' },
     ]);
     await req('/auth/login', 'POST', { username: 'tester', password: 'incorrect' }, 401);
     const preflight = await fetch(base + '/api/tasks', {
@@ -73,6 +73,12 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
     });
     assert.equal(preflight.status, 204);
     assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://frontend.example');
+    const daily = await req('/lists', 'POST', { listDate: '2026-09-30' }, 201);
+    assert.equal(daily.name, '2026/09/30');
+    assert.equal(daily.listDate, '2026-09-30');
+    assert.equal((await req('/lists')).find((l) => l.id === daily.id).listDate, '2026-09-30');
+    await req('/lists', 'POST', { listDate: '2026-02-30' }, 400);
+    await req('/lists/' + daily.id, 'DELETE');
     const l = await req('/lists', 'POST', { name: 'テスト' }, 201);
     const styled = await req('/lists/' + l.id, 'PATCH', {
       pinned: true,

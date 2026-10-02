@@ -112,6 +112,25 @@ test(
         () => document.querySelector('.list-caption')?.textContent === 'マイリスト 1',
       );
       assert.equal(await page.locator('[data-list-id="inbox"]').count(), 1);
+      await page.locator('[data-new-list]').click();
+      await page.getByLabel('リスト名', { exact: true }).fill('自由な名前');
+      const todayList = page.getByRole('checkbox', { name: '今日のリストを作る' });
+      await todayList.check();
+      const dateName = await page.evaluate(() => {
+        const d = new Date();
+        return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      });
+      assert.equal(await page.locator('#list-name').inputValue(), dateName);
+      await todayList.uncheck();
+      assert.equal(await page.locator('#list-name').inputValue(), '自由な名前');
+      await todayList.check();
+      await page.locator('#list-form button[type="submit"]').click();
+      await page.getByRole('heading', { name: dateName, exact: true }).waitFor();
+      assert.ok((await page.locator('[data-list-id]').first().textContent()).includes(dateName));
+      await page.reload();
+      await page.locator('[data-list-id]').first().waitFor();
+      assert.ok((await page.locator('[data-list-id]').first().textContent()).includes(dateName));
+      await page.locator('[data-list-id="inbox"]').click();
       await page.getByRole('textbox', { name: '新しいタスク' }).fill('E2E テストのタスク');
       await page.getByRole('textbox', { name: '新しいタスク' }).press('Enter');
       const task = page.locator('article.task').filter({ hasText: 'E2E テストのタスク' });
@@ -251,6 +270,21 @@ test(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         true,
       );
+      assert.equal(
+        await page
+          .locator(
+            '.sidebar .avatar, .sidebar .profile, .sidebar .local-status, .sidebar [data-logout]',
+          )
+          .count(),
+        0,
+      );
+      await page.locator('[data-mobile]').click();
+      await page.locator('[data-view="server"]').click();
+      await page.getByRole('heading', { name: 'サーバー管理', exact: true }).waitFor();
+      assert.equal(await page.locator('.server-preview .avatar').count(), 1);
+      assert.equal(await page.getByLabel('接続先', { exact: true }).inputValue(), base);
+      await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+      await page.getByRole('heading', { name: 'バックエンドにログイン', exact: true }).waitFor();
       assert.deepEqual(errors, []);
     } finally {
       await browser?.close();

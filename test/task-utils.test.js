@@ -1,7 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { today, escapeHtml, tasksForView, visibleTasks } from '../public/task-utils.js';
+import {
+  today,
+  escapeHtml,
+  tasksForView,
+  visibleTasks,
+  orderedLists,
+} from '../public/task-utils.js';
 import { entryKind, entryCells } from '../src/entry-validation.js';
+
+test('dated lists lead on their day and move behind normal lists afterwards', () => {
+  const lists = [
+    { id: 'old', listDate: '2026-09-29' },
+    { id: 'normal' },
+    { id: 'daily', listDate: '2026-09-30' },
+    { id: 'new' },
+  ];
+  assert.deepEqual(
+    orderedLists(lists, '2026-09-30').map((l) => l.id),
+    ['daily', 'normal', 'new', 'old'],
+  );
+  assert.deepEqual(
+    orderedLists(lists, '2026-10-01').map((l) => l.id),
+    ['normal', 'new', 'old', 'daily'],
+  );
+  assert.equal(lists[0].id, 'old');
+});
 
 const tasks = [
   {

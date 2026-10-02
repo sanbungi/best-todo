@@ -51,6 +51,7 @@ const listColumns = db
   .map((c) => c.name);
 for (const [name, definition] of Object.entries({
   pinned: 'INTEGER NOT NULL DEFAULT 0',
+  listDate: "TEXT NOT NULL DEFAULT ''",
   icon: "TEXT NOT NULL DEFAULT '☰'",
   color: "TEXT NOT NULL DEFAULT '#6488d8'",
 })) {
@@ -260,8 +261,16 @@ export const server = http.createServer(async (req, res) => {
         return send(200, db.prepare('SELECT * FROM lists ORDER BY rowid').all());
       if (p === '/api/lists' && method === 'POST') {
         const b = await body(req);
-        const item = { id: randomUUID(), name: cleanText(b.name, 'リスト名', 100) };
-        db.prepare('INSERT INTO lists (id,name) VALUES (?,?)').run(item.id, item.name);
+        const listDate = 'listDate' in b ? date(b.listDate) : '';
+        const item = {
+          id: randomUUID(),
+          name: listDate ? listDate.replaceAll('-', '/') : cleanText(b.name, 'リスト名', 100),
+        };
+        db.prepare('INSERT INTO lists (id,name,listDate) VALUES (?,?,?)').run(
+          item.id,
+          item.name,
+          listDate,
+        );
         return send(201, db.prepare('SELECT * FROM lists WHERE id=?').get(item.id));
       }
       const lm = p.match(/^\/api\/lists\/([^/]+)$/);
