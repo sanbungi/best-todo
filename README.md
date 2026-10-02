@@ -7,6 +7,7 @@
 
 [![CI](https://github.com/sanbungi/mytodo/actions/workflows/ci.yml/badge.svg)](https://github.com/sanbungi/mytodo/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/sanbungi/mytodo?include_prereleases&sort=semver)](https://github.com/sanbungi/mytodo/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Web%20%7C%20Windows%20%7C%20Linux%20%7C%20Android-5865f2)
 
 <img src="docs/assets/demo.gif" alt="Best ToDo のデモ：リスト作成、タスク登録、メモ・表の追加、検索、並べ替え" width="860">
@@ -62,3 +63,7 @@ http://127.0.0.1:8080 を開き、Backend URLに `http://127.0.0.1:3000` と `.e
 ## 🤝 コントリビュート
 
 Issue・Pull Requestを歓迎します。始め方は[開発ガイド](docs/development.md#コントリビュート)を参照してください。
+
+## 📄 ライセンス
+
+[MIT](LICENSE)

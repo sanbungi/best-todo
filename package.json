@@ -4,6 +4,7 @@
   "private": true,
   "description": "日本語のTo Doデスクトップクライアント",
   "author": "Best ToDo contributors",
+  "license": "MIT",
   "main": "electron/main.js",
   "desktopName": "best-todo.desktop",
   "build": {
