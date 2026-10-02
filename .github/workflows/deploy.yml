@@ -1,0 +1,54 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+# 古いcommitが新しいcommitを上書きしないよう、実行中のデプロイは止めずに順番待ちさせる
+concurrency:
+  group: deploy-caprover
+  cancel-in-progress: false
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  images:
+    needs: test
+    uses: ./.github/workflows/images.yml
+    permissions:
+      contents: read
+      packages: write
+
+  caprover:
+    needs: images
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            app: ${{ vars.CAPROVER_BACKEND_APP || 'todo-backend' }}
+            token: CAPROVER_BACKEND_TOKEN
+          - service: frontend
+            app: ${{ vars.CAPROVER_FRONTEND_APP || 'todo-frontend' }}
+            token: CAPROVER_FRONTEND_TOKEN
+    steps:
+      - name: Image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-${{ matrix.service }}:${{ needs.images.outputs.tag }}" >> "$GITHUB_OUTPUT"
+      - name: Check secrets
+        env:
+          CAPROVER_URL: ${{ secrets.CAPROVER_URL }}
+          APP_TOKEN: ${{ secrets[matrix.token] }}
+        run: |
+          [ -n "$CAPROVER_URL" ] || { echo "::error::Secret CAPROVER_URL が未設定です"; exit 1; }
+          [ -n "$APP_TOKEN" ] || { echo "::error::Secret ${{ matrix.token }} が未設定です"; exit 1; }
+      - uses: caprover/deploy-from-github@v2
+        with:
+          server: ${{ secrets.CAPROVER_URL }}
+          app: ${{ matrix.app }}
+          token: ${{ secrets[matrix.token] }}
+          image: ${{ steps.image.outputs.name }}

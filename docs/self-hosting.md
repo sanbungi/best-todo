@@ -19,12 +19,12 @@ flowchart LR
 
 ## コンテナイメージ
 
-`v*` タグごとにGHCRへイメージを公開しています。
+`v*` タグとmainへのpushごとにGHCRへイメージを公開しています。
 
 - `ghcr.io/sanbungi/mytodo-backend`
 - `ghcr.io/sanbungi/mytodo-frontend`
 
-タグは `sha-<完全なcommit SHA>`（運用ではこちらを推奨）、`latest`、バージョン（例: `1.2.3`）です。`latest` はタグ時とmainでの手動実行で付きます。
+タグは `sha-<完全なcommit SHA>`（運用ではこちらを推奨）、`latest`、バージョン（例: `1.2.3`）です。`latest` はタグ時とmainからのビルドで付きます。
 
 バックエンドのコンテナは非rootのnodeユーザー（UID 1000）で動作し、`/data` にSQLiteを保存します。
 
@@ -95,6 +95,24 @@ https://todo-demo.example.com/?backend=https://api-demo.example.com
 6. 各アプリのDeploymentで[イメージ名](#コンテナイメージ)を指定してデプロイ。非公開GHCRの場合はCapRoverにGHCRレジストリ認証（read:packagesを持つ資格情報）を設定します。
 
 Backend URLはブラウザから到達可能な公開URLです。CapRover内部のサービス名は指定しません。
+
+### GitHub Actionsから自動デプロイする
+
+`.github/workflows/deploy.yml` は、mainへのpush（または手動実行）でCI通過後にイメージをGHCRへpushし、CapRoverのApp Tokenでそのcommitの `sha-<SHA>` イメージをデプロイします。
+
+1. 各アプリの Deployment → Method 1: Official CLI で「Enable App Token」を有効にし、トークンを控える。
+2. リポジトリの Settings → Environments に `production` を作成し、次のSecretsを登録。
+
+   | Secret                    | 内容                                                             |
+   | ------------------------- | ---------------------------------------------------------------- |
+   | `CAPROVER_URL`            | CapRoverダッシュボードのURL（例: `https://captain.example.com`） |
+   | `CAPROVER_BACKEND_TOKEN`  | バックエンドアプリのApp Token                                    |
+   | `CAPROVER_FRONTEND_TOKEN` | フロントエンドアプリのApp Token                                  |
+
+3. アプリ名が `todo-backend` / `todo-frontend` 以外の場合は、Variables `CAPROVER_BACKEND_APP` / `CAPROVER_FRONTEND_APP` を設定。
+4. GHCRのパッケージが非公開の場合は、CapRoverの Cluster → Docker Registry Configuration に `ghcr.io`（read:packagesを持つPAT）を登録。
+
+デプロイは順番に実行され、前のデプロイの途中で止めることはありません。`production` 環境に承認者を設定すれば、デプロイ前に手動承認を挟めます。
 
 ソースからビルドする場合は、各アプリでCaptain Definitionのパスに `captain-definition.backend` / `captain-definition.frontend` を指定できます。
 
