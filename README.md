@@ -12,7 +12,7 @@
 
 <img src="docs/assets/demo.gif" alt="Best ToDo のデモ：リスト作成、タスク登録、メモ・表の追加、検索、並べ替え" width="860">
 
-<sub>15秒ダイジェスト · ▶ <a href="docs/assets/demo.mp4">字幕付きのフルデモ（約77秒）を見る</a></sub>
+<sub>18秒ダイジェスト · ▶ <a href="docs/assets/demo.mp4">字幕付きのフルデモ（約77秒）を見る</a></sub>
 
 </div>
 

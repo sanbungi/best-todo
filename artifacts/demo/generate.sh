@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Record the real Web UI, then create the full and 15-second MP4 demos.
+# Record the real Web UI, then create the full and short MP4 demos.
 set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,7 +8,7 @@ mode="${1:-all}"
 usage() {
   cat <<'HELP'
 使い方: bash artifacts/demo/generate.sh [--check | --render-only | --help]
-  引数なし       Web版を操作・録画し、通常版と15秒版を生成
+  引数なし       Web版を操作・録画し、通常版とショート版を生成
   --check        必要なコマンド・依存関係を確認（録画なし）
   --render-only  保存済みの録画から両方のMP4を再生成
   --help         この説明を表示
@@ -53,7 +53,7 @@ else
   echo '[1/3] Web版を起動・操作して録画します（約80秒）。'
   node "$script_dir/record.mjs"
 fi
-echo '[2/3] 通常版と15秒版を生成します。'
+echo '[2/3] 通常版とショート版を生成します。'
 python3 "$script_dir/render.py"
 echo '[3/3] MP4の形式・長さ・デコードを確認します。'
 python3 - "$script_dir" <<'PY'
@@ -72,8 +72,8 @@ for name in ['best-todo-demo.mp4', 'best-todo-demo-short.mp4']:
     duration = float(info['format']['duration'])
     assert duration > 0
     if name.endswith('-short.mp4'):
-        assert abs(duration - 15) < 0.05, duration
+        assert 15 <= duration <= 22, duration
     subprocess.run(['ffmpeg', '-v', 'error', '-xerror', '-i', str(path), '-f', 'null', '-'], check=True)
     print(f'{path} ({duration:.1f}秒)')
 PY
-echo '完了: 通常版と15秒ショート版を生成しました。'
+echo '完了: 通常版とショート版（約18秒）を生成しました。'

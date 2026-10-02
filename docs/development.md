@@ -155,7 +155,7 @@ PKCS12形式（keytoolの既定）では鍵のパスワードはkeystoreのパ�
 
 ## デモ動画
 
-Web版の実操作をPlaywrightで録画し、日本語字幕付きの通常版と15秒ショート版をまとめて生成します。詳細は[デモ動画の生成マニュアル](../artifacts/demo/README.md)を参照してください。
+Web版の実操作をPlaywrightで録画し、日本語字幕付きの通常版と約18秒のショート版をまとめて生成します。詳細は[デモ動画の生成マニュアル](../artifacts/demo/README.md)を参照してください。
 
 ```sh
 bash artifacts/demo/generate.sh

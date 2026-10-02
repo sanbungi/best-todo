@@ -3,7 +3,7 @@ from pathlib import Path
 out=Path(__file__).resolve().parent
 data=json.loads((out/'chapters.json').read_text())
 probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-of','json',str(out/'recording.webm')]))
-offset=max(0,float(probe['format']['duration'])-data['duration'])
+offset=data.get('videoOffset',max(0,float(probe['format']['duration'])-data['duration'])) # older recordings: estimate from the end
 def stamp(s):
  c=round(s*100);return f'{c//360000}:{c//6000%60:02}:{c//100%60:02}.{c%100:02}'
 ass='''[Script Info]
@@ -27,25 +27,30 @@ for i,c in enumerate(data['chapters']):
  meta+=f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={round(c['start']*1000)}\nEND={round(end*1000)}\ntitle={c['title']}\n"
 (out/'captions.ass').write_text(ass)
 (out/'chapters.ffmeta').write_text(meta)
-subprocess.run(['ffmpeg','-y','-hide_banner','-loglevel','warning','-ss',str(offset),'-i',str(out/'recording.webm'),'-i',str(out/'chapters.ffmeta'),'-map_metadata','1','-map_chapters','1','-vf',f'pad=1440:900:0:0:color=0x16181f,ass=captions.ass','-r','30','-c:v','libx264','-preset','medium','-crf','20','-pix_fmt','yuv420p','-movflags','+faststart','-an',str(out/'best-todo-demo.mp4')],check=True,cwd=out)
+subprocess.run(['ffmpeg','-y','-hide_banner','-loglevel','warning','-ss',str(offset),'-i',str(out/'recording.webm'),'-i',str(out/'chapters.ffmeta'),'-map_metadata','1','-map_chapters','1','-t',str(data['duration']),'-vf',f'pad=1440:900:0:0:color=0x16181f,ass=captions.ass','-r','30','-c:v','libx264','-preset','medium','-crf','20','-pix_fmt','yuv420p','-movflags','+faststart','-an',str(out/'best-todo-demo.mp4')],check=True,cwd=out)
 print('Created:',out/'best-todo-demo.mp4')
 
-# Six short scenes, each 2.5 seconds: keep the actual UI and replace long captions.
-chapters=data['chapters']
+# Six short scenes around the recorded typing marks, so input stays visible instead of
+# appearing instantly. (begin, end, speed, caption); only the long table input is sped up.
+if 'marks' not in data: raise SystemExit('chapters.json に入力時刻（marks）がありません。引数なしで録画し直してください。')
+m=data['marks']
 scenes=[
- (chapters[3]['start']-3.5,chapters[3]['start'], 'Best ToDo｜タスクをすぐ登録'),
- (chapters[4]['start']-6,chapters[4]['start']-2, 'ステップ・期限・メモで具体化'),
- (chapters[4]['start'],chapters[5]['start'], '終わったらチェックで完了'),
- (chapters[6]['start']-3.5,chapters[6]['start'], 'メモも同じリストに保存'),
- (chapters[7]['start']-3.5,chapters[7]['start'], '表で担当・日付を整理'),
- (chapters[7]['start']+0.8,chapters[8]['start']-1, '検索ですぐ見つかる｜Best ToDo'),
+ (m['task0']-0.4,m['task0:end']+1.4,1,'Best ToDo｜入力して Enter で登録'),
+ (m['detailMemo']-0.6,m['detailMemo:end']+1.0,1,'ステップ・期限・メモで具体化'),
+ (m['complete'],m['complete']+2.6,1,'終わったらチェックで完了'),
+ (m['memo']-0.4,m['memo:end']+1.9,1,'メモも同じリストに保存'),
+ (m['table']-0.3,m['table:end']+0.8,2,'表で担当・日付を整理（2倍速）'),
+ (m['search']-0.6,m['search:end']+2.4,1,'検索ですぐ見つかる｜Best ToDo'),
 ]
 short_ass=ass_header
-filters=['[0:v]split=6'+''.join(f'[s{i}]' for i in range(6))]
-for i,(begin,end,title) in enumerate(scenes):
- short_ass+=f"Dialogue: 0,{stamp(i*2.5)},{stamp((i+1)*2.5)},Default,,0,0,0,,{title}\n"
- filters.append(f'[s{i}]trim=start={offset+begin}:end={offset+end},setpts=(PTS-STARTPTS)*{2.5/(end-begin)},fps=30,tpad=stop_mode=clone:stop_duration=0.1,trim=duration=2.5[v{i}]')
+filters=['[0:v]split=%d'%len(scenes)+''.join(f'[s{i}]' for i in range(len(scenes)))]
+t=0
+for i,(begin,end,speed,title) in enumerate(scenes):
+ d=round((end-begin)/speed*30)/30
+ short_ass+=f"Dialogue: 0,{stamp(t)},{stamp(t+d)},Default,,0,0,0,,{title}\n"
+ filters.append(f'[s{i}]trim=start={offset+begin}:end={offset+end},setpts=(PTS-STARTPTS)/{speed},fps=30,tpad=stop_mode=clone:stop_duration=0.1,trim=duration={d}[v{i}]')
+ t+=d
 (out/'short-captions.ass').write_text(short_ass)
-filters.append(''.join(f'[v{i}]' for i in range(6))+f'concat=n=6:v=1:a=0,pad=1440:900:0:0:color=0x16181f,ass=short-captions.ass[short]')
-subprocess.run(['ffmpeg','-y','-hide_banner','-loglevel','warning','-i',str(out/'recording.webm'),'-filter_complex',';'.join(filters),'-map','[short]','-map_metadata','-1','-map_chapters','-1','-t','15','-r','30','-c:v','libx264','-preset','medium','-crf','20','-pix_fmt','yuv420p','-movflags','+faststart','-an',str(out/'best-todo-demo-short.mp4')],check=True,cwd=out)
-print('Created:',out/'best-todo-demo-short.mp4')
+filters.append(''.join(f'[v{i}]' for i in range(len(scenes)))+f'concat=n={len(scenes)}:v=1:a=0,pad=1440:900:0:0:color=0x16181f,ass=short-captions.ass[short]')
+subprocess.run(['ffmpeg','-y','-hide_banner','-loglevel','warning','-i',str(out/'recording.webm'),'-filter_complex',';'.join(filters),'-map','[short]','-map_metadata','-1','-map_chapters','-1','-t',f'{t:.3f}','-r','30','-c:v','libx264','-preset','medium','-crf','20','-pix_fmt','yuv420p','-movflags','+faststart','-an',str(out/'best-todo-demo-short.mp4')],check=True,cwd=out)
+print(f'Created: {out/"best-todo-demo-short.mp4"} ({t:.1f}s)')

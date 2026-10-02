@@ -8,8 +8,9 @@ const temp = await mkdtemp('/tmp/best-todo-demo-');
 const env = { ...process.env };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
-let browser, context, frontend, backend, page, start, video;
+let browser, context, frontend, backend, page, start, video, videoStart;
 const chapters = [];
+const marks = {};
 const errors = [];
 async function chapter(title) {
   chapters.push({ start: (Date.now() - start) / 1000, title });
@@ -25,13 +26,17 @@ async function click(locator) {
   await locator.click();
   await pause(500);
 }
-async function input(locator, value) {
+// Typing start/end times let the short version keep the actual typing on screen.
+const mark = (name) => (marks[name] = (Date.now() - start) / 1000);
+async function input(locator, value, name) {
   await click(locator);
   await page.keyboard.press('Control+a');
+  if (name) mark(name);
   for (const char of value) {
     await page.keyboard.insertText(char);
     await pause(45);
   }
+  if (name) mark(name + ':end');
   await pause(650);
 }
 const button = (name) => page.getByRole('button', { name, exact: true });
@@ -92,6 +97,7 @@ try {
     });
   });
   page = await context.newPage();
+  videoStart = Date.now();
   video = page.video();
   page.setDefaultTimeout(10000);
   page.on('pageerror', (e) => errors.push(e.message));
@@ -112,8 +118,12 @@ try {
   await click(page.locator('#list-form button[type="submit"]'));
   await pause(1800);
   await chapter('02  タスクを入力して Enter で登録');
-  for (const title of ['公開ページを仕上げる', '動作チェックを行う', 'チームに公開を知らせる']) {
-    await input(page.getByRole('textbox', { name: '新しいタスク' }), title);
+  for (const [i, title] of [
+    '公開ページを仕上げる',
+    '動作チェックを行う',
+    'チームに公開を知らせる',
+  ].entries()) {
+    await input(page.getByRole('textbox', { name: '新しいタスク' }), title, 'task' + i);
     await enter();
   }
   await chapter('03  ステップ・期限・メモで、作業を具体化');
@@ -132,10 +142,12 @@ try {
   await input(
     page.getByRole('textbox', { name: 'メモ', exact: true }),
     'トップ画像と申込みボタンを最終確認。',
+    'detailMemo',
   );
   await click(button('詳細を閉じる'));
   await pause(2000);
   await chapter('04  完了したタスクはチェックで管理');
+  mark('complete');
   await click(
     page
       .locator('article.task')
@@ -152,19 +164,25 @@ try {
   await input(
     page.getByRole('textbox', { name: '新しいメモ' }),
     '公開日の確認事項\n告知は午前10時。チームへの共有を忘れずに。',
+    'memo',
   );
   await page.keyboard.press('Control+Enter');
   await pause(2400);
   await chapter('06  表で情報を整理｜列を増やして Enter で登録');
   await click(modes.getByRole('button', { name: '表', exact: true }));
-  await input(page.getByRole('textbox', { name: '新しい行 1列目', exact: true }), '公開ページ');
+  await input(
+    page.getByRole('textbox', { name: '新しい行 1列目', exact: true }),
+    '公開ページ',
+    'table',
+  );
   await input(page.getByRole('textbox', { name: '新しい行 2列目', exact: true }), 'デザイン担当');
   await click(button('新しい行に列を追加'));
   await input(page.getByRole('textbox', { name: '新しい行 3列目', exact: true }), '10月9日');
   await enter();
+  mark('table:end');
   await pause(2000);
   await chapter('07  検索で、必要なタスク・メモ・表を探す');
-  await input(page.getByRole('textbox', { name: 'タスクを検索' }), '公開');
+  await input(page.getByRole('textbox', { name: 'タスクを検索' }), '公開', 'search');
   await pause(3000);
   await click(button('検索をクリア'));
   await pause(1000);
@@ -205,7 +223,10 @@ try {
     JSON.stringify(
       {
         duration: (Date.now() - start) / 1000,
+        // Seconds from the start of recording.webm to the first chapter.
+        videoOffset: (start - videoStart) / 1000,
         chapters,
+        marks,
         verified: { tasks: 3, memos: 1, tables: 1, persistence: true, pageErrors: errors },
       },
       null,
