@@ -51,7 +51,7 @@ jobs:
       - uses: caprover/deploy-from-github@v2
         with:
           server: ${{ secrets.CAPROVER_URL }}
-          # environmentのVariablesも読めるよう、matrixではなくステップで解決する
-          app: ${{ vars[matrix.app_var] || matrix.app }}
+          # environmentの値も読めるよう、matrixではなくステップで解決する（Secrets優先）
+          app: ${{ secrets[matrix.app_var] || vars[matrix.app_var] || matrix.app }}
           token: ${{ secrets[matrix.token] }}
           image: ${{ steps.image.outputs.name }}

@@ -109,7 +109,7 @@ Backend URLはブラウザから到達可能な公開URLです。CapRover内部�
    | `CAPROVER_BACKEND_TOKEN`  | バックエンドアプリのApp Token                                    |
    | `CAPROVER_FRONTEND_TOKEN` | フロントエンドアプリのApp Token                                  |
 
-3. アプリ名が `todo-backend` / `todo-frontend` 以外の場合は、同じ `production` 環境（またはリポジトリ）の Variables に `CAPROVER_BACKEND_APP` / `CAPROVER_FRONTEND_APP` を設定。
+3. アプリ名が `todo-backend` / `todo-frontend` 以外の場合は、同じ `production` 環境（またはリポジトリ）の Secrets か Variables に `CAPROVER_BACKEND_APP` / `CAPROVER_FRONTEND_APP` を設定（Secretsが優先。Secretsにするとログ上のアプリ名は `***` になります）。
 4. GHCRのパッケージが非公開の場合は、CapRoverの Cluster → Docker Registry Configuration に `ghcr.io`（read:packagesを持つPAT）を登録。
 
 デプロイは順番に実行され、前のデプロイの途中で止めることはありません。`production` 環境に承認者を設定すれば、デプロイ前に手動承認を挟めます。
