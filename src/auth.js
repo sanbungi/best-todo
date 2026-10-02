@@ -1,9 +1,12 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { demoMode } from './demo.js';
 
-const username = process.env.AUTH_USERNAME;
-const password = process.env.AUTH_PASSWORD;
-if (!username || !password || password.length < 12)
+// The demo publishes its credentials, so they may be short and default to demo / demo.
+const username = process.env.AUTH_USERNAME || (demoMode ? 'demo' : '');
+const password = process.env.AUTH_PASSWORD || (demoMode ? 'demo' : '');
+if (!username || !password || (!demoMode && password.length < 12))
   throw new Error('AUTH_USERNAME and AUTH_PASSWORD (at least 12 characters) are required');
+export const demoCredentials = demoMode ? { username, password } : null;
 const salt = randomBytes(16);
 const passwordHash = scryptSync(password, salt, 64);
 const sessions = new Map();
@@ -35,7 +38,8 @@ export function login(name, secret) {
     timingSafeEqual(digest(name), digest(username)) &&
     timingSafeEqual(scryptSync(secret, salt, 64), passwordHash);
   if (!valid) {
-    if (++failures >= 10) {
+    // A shared lockout would let one visitor block everyone else from the public demo.
+    if (!demoMode && ++failures >= 10) {
       blockedUntil = now + 60000;
       failures = 0;
     }

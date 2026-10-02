@@ -9,8 +9,10 @@ import {
   sessionSettings,
   setSessionTtlHours,
   revokeSessions,
+  demoCredentials,
 } from './auth.js';
 import { seed } from './seed.js';
+import { demoMode, demoLimits, startDemo } from './demo.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { entryKind, entryCells } from './entry-validation.js';
@@ -59,10 +61,11 @@ for (const [name, definition] of Object.entries({
 }
 if (!db.prepare('SELECT id FROM lists LIMIT 1').get())
   db.prepare('INSERT INTO lists (id,name) VALUES (?, ?)').run('inbox', 'マイタスク');
-if (process.env.SEED_DATA === 'true') {
+if (process.env.SEED_DATA === 'true' && !demoMode) {
   if (process.env.NODE_ENV === 'production') throw new Error('Production seed is disabled');
   seed(db);
 }
+const nextDemoResetAt = demoMode ? startDemo(db) : null;
 const allowedOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
   .map((v) => v.trim())
@@ -116,6 +119,11 @@ async function body(req, maxBytes = 100000) {
     fail(400, 'JSONが不正です');
   }
 }
+function demoQuota(table, adding = 1) {
+  if (!demoMode || !adding) return;
+  if (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n + adding > demoLimits[table])
+    fail(403, 'デモ環境の上限に達しました。リセットまでお待ちください');
+}
 function listExists(id) {
   if (!db.prepare('SELECT id FROM lists WHERE id=?').get(id)) fail(404, 'リストがありません');
 }
@@ -145,6 +153,10 @@ export const server = http.createServer(async (req, res) => {
         return res.end();
       }
       if (p === '/api/health' && method === 'GET') return send(200, { status: 'ok' });
+      if (p === '/api/demo' && method === 'GET') {
+        if (!demoMode) fail(404, 'APIが見つかりません');
+        return send(200, { ...demoCredentials, nextResetAt: nextDemoResetAt() });
+      }
       if (p === '/api/auth/login' && method === 'POST') {
         const b = await body(req);
         return send(200, login(b.username, b.password));
@@ -155,6 +167,12 @@ export const server = http.createServer(async (req, res) => {
         return send(200, { loggedOut: true });
       }
       if (p === '/api/auth/session' && method === 'GET') return send(200, sessionSettings(token));
+      if (
+        demoMode &&
+        ((p === '/api/auth/session' && method === 'PATCH') ||
+          (p === '/api/auth/sessions/revoke' && method === 'POST'))
+      )
+        fail(403, 'デモ環境ではセッション設定を変更できません');
       if (p === '/api/auth/session' && method === 'PATCH') {
         const b = await body(req);
         const hours = Number(b.sessionTtlHours);
@@ -216,6 +234,16 @@ export const server = http.createServer(async (req, res) => {
             fail(400, `${i + 2}行目: ${e.message}`);
           }
         });
+        if (demoMode) {
+          const names = new Set(
+            db
+              .prepare('SELECT name FROM lists')
+              .all()
+              .map((l) => l.name),
+          );
+          demoQuota('tasks', items.length);
+          demoQuota('lists', new Set(items.map((i) => i.list).filter((n) => !names.has(n))).size);
+        }
         db.exec('BEGIN IMMEDIATE');
         try {
           const lists = new Map(
@@ -262,6 +290,7 @@ export const server = http.createServer(async (req, res) => {
       if (p === '/api/lists' && method === 'POST') {
         const b = await body(req);
         const listDate = 'listDate' in b ? date(b.listDate) : '';
+        demoQuota('lists');
         const item = {
           id: randomUUID(),
           name: listDate ? listDate.replaceAll('-', '/') : cleanText(b.name, 'リスト名', 100),
@@ -346,6 +375,7 @@ export const server = http.createServer(async (req, res) => {
         const b = await body(req);
         const listId = cleanText(b.listId, 'リストID');
         listExists(listId);
+        demoQuota('tasks');
         const kind = entryKind(b.kind),
           cells = entryCells(b.cells ?? [], kind);
         const note = cleanText(b.note ?? '', 'メモ', 10000, kind !== 'memo');

@@ -61,8 +61,39 @@ function savedLogin() {
   };
 }
 const initialLogin = savedLogin();
-let backend = initialLogin.backend || '';
+// A shared link like ?backend=https://api.example.com pre-fills the login form.
+let backend = initialLogin.backend || new URLSearchParams(location.search).get('backend') || '';
 let token = initialLogin.token || '';
+// Public demo backends (DEMO_MODE) publish their credentials and next reset time.
+let demo = null;
+let demoChecked = false;
+let demoTimer = 0;
+async function fetchDemo(origin) {
+  try {
+    const r = await fetch(new URL('/api/demo', origin), { credentials: 'omit', redirect: 'error' });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
+function scheduleDemoReset() {
+  clearTimeout(demoTimer);
+  if (!demo) return;
+  // Reload just after the server reseeds so visitors never edit wiped items.
+  const wait = Math.max(Date.parse(demo.nextResetAt) - Date.now(), 0) + 3000;
+  demoTimer = setTimeout(
+    () =>
+      run(async () => {
+        if (!token) return;
+        demo = await fetchDemo(backend);
+        closeDetail(false);
+        await refresh();
+        scheduleDemoReset();
+        toast('デモデータがリセットされました');
+      }),
+    Math.min(wait, 2 ** 31 - 1),
+  );
+}
 function saveLogin(expiresAt) {
   localStorage.setItem(authStorageKey, JSON.stringify({ backend, token, expiresAt }));
   sessionStorage.setItem('backend', backend);
@@ -122,8 +153,29 @@ function showLogin() {
   state.query = '';
   state.drafts = { task: '', memo: '', cells: ['', ''] };
   state.sessionSettings = null;
+  demo = null;
+  demoChecked = false;
+  clearTimeout(demoTimer);
   $('#app').innerHTML =
-    `<form id="login-form" class="login-form stack-form"><h1>バックエンドにログイン</h1><label>Backend URL<input class="control" name="backend" type="url" inputmode="url" placeholder="https://api.example.com" value="${esc(backend)}" required autocomplete="url"></label><label>ユーザー名<input class="control" name="username" autocomplete="username" required></label><label>パスワード<input class="control" name="password" type="password" autocomplete="current-password" required></label><button class="save" type="submit">ログイン</button><p class="field-hint">接続先のオリジンだけを入力してください。ログイン状態は同じブラウザにセッション期限まで保存されます。</p></form>`;
+    `<form id="login-form" class="login-form stack-form"><h1>バックエンドにログイン</h1><label>Backend URL<input class="control" name="backend" type="url" inputmode="url" placeholder="https://api.example.com" value="${esc(backend)}" required autocomplete="url"></label><label>ユーザー名<input class="control" name="username" autocomplete="username" required></label><label>パスワード<input class="control" name="password" type="password" autocomplete="current-password" required></label><button class="save" type="submit">ログイン</button><p class="field-hint">接続先のオリジンだけを入力してください。ログイン状態は同じブラウザにセッション期限まで保存されます。</p><p class="demo-hint" hidden></p></form>`;
+  const fillDemo = async () => {
+    const form = $('#login-form');
+    let origin;
+    try {
+      origin = new URL(form.backend.value).origin;
+    } catch {
+      return;
+    }
+    const info = await fetchDemo(origin);
+    if (!info || form !== $('#login-form') || new URL(form.backend.value).origin !== origin) return;
+    form.username.value ||= info.username;
+    form.password.value ||= info.password;
+    const hint = form.querySelector('.demo-hint');
+    hint.textContent = `デモ環境です。ユーザー名「${info.username}」・パスワード「${info.password}」でログインできます。データは全員で共有され、定期的に初期状態へ戻ります。`;
+    hint.hidden = false;
+  };
+  $('#login-form').backend.onchange = fillDemo;
+  if (backend) fillDemo();
   $('#login-form').onsubmit = (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -200,6 +252,11 @@ async function run(fn) {
   }
 }
 async function refresh() {
+  if (!demoChecked) {
+    demoChecked = true;
+    demo = await fetchDemo(backend);
+    scheduleDemoReset();
+  }
   [state.lists, state.tasks] = await Promise.all([api('/lists'), api('/tasks')]);
   state.tasks = withoutPendingDelete(state.tasks);
   if (state.view !== 'server' && !state.lists.some((l) => l.id === state.view))
@@ -410,8 +467,10 @@ function serverSettings() {
   );
   const sessions = panel(
     'ログインセッション',
-    'ログイン状態を保つ時間です。変更は次回のログインから適用されます。',
-    `<dl class="info-list"><div><dt>有効なセッション</dt><dd>${session ? `${session.activeSessions} 件` : '取得中…'}</dd></div><div><dt>このセッションの期限</dt><dd>${esc(expires)}</dd></div></dl><form id="session-form" class="panel-form"><label class="field-narrow">ログイン維持時間<span class="input-unit"><input class="control" name="sessionTtlHours" type="number" min="1" max="8760" step="1" value="${esc(String(session?.sessionTtlHours ?? 24))}" required><span>時間</span></span></label><div class="panel-actions"><button class="save" type="submit">保存</button><button type="button" class="btn btn-danger" data-revoke-sessions>他のセッションをログアウト</button></div></form>`,
+    demo
+      ? 'デモ環境ではセッション設定を変更できません。'
+      : 'ログイン状態を保つ時間です。変更は次回のログインから適用されます。',
+    `<dl class="info-list"><div><dt>有効なセッション</dt><dd>${session ? `${session.activeSessions} 件` : '取得中…'}</dd></div><div><dt>このセッションの期限</dt><dd>${esc(expires)}</dd></div></dl><form id="session-form" class="panel-form"><label class="field-narrow">ログイン維持時間<span class="input-unit"><input class="control" name="sessionTtlHours" type="number" min="1" max="8760" step="1" value="${esc(String(session?.sessionTtlHours ?? 24))}" required ${demo ? 'disabled' : ''}><span>時間</span></span></label><div class="panel-actions"><button class="save" type="submit" ${demo ? 'disabled' : ''}>保存</button><button type="button" class="btn btn-danger" data-revoke-sessions ${demo ? 'disabled' : ''}>他のセッションをログアウト</button></div></form>`,
   );
   const data = panel(
     'データ',
@@ -503,7 +562,7 @@ function renderAll() {
           '',
         )}</select></label><button type="button" class="icon-button" data-menu aria-label="リストメニュー">•••</button>${state.menu ? `<div class="menu"><button type="button" data-toggle-done>${state.showDone ? '完了済みを隠す' : '完了済みを表示'}</button>${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" data-rename>リスト名を変更</button>' : ''}${!state.query && state.lists.some((l) => l.id === state.view) ? '<button type="button" class="danger" data-delete-list>リストを削除</button>' : ''}</div>` : ''}</div></header><section class="task-list" aria-label="タスク一覧">${active.map(row).join('')}${!active.length && !done.length ? (state.query ? '<div class="empty"><p>一致する項目はありません</p></div>' : '<div class="empty"><p>まだ項目がありません</p><small>下の入力欄からタスク・メモ・表を追加できます</small></div>') : ''}${done.length ? `<button class="completed-toggle" data-toggle-done>${state.showDone ? '⌄' : '›'} 完了済み <small>${done.length}</small></button>${state.showDone ? done.map(row).join('') : ''}` : ''}</section>${composer()}</main>`;
   $('#app').innerHTML =
-    `<aside class="sidebar ${state.mobile ? 'mobile-open' : ''}"><div class="brand"><span>✓</span> BEST TODO</div><div class="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" aria-label="タスクを検索" placeholder="検索" value="${esc(state.query)}" autocomplete="off" enterkeyhint="search">${state.query ? '<button type="button" class="icon-button" data-clear-search aria-label="検索をクリア">×</button>' : ''}</div><nav>${
+    `<aside class="sidebar ${state.mobile ? 'mobile-open' : ''}"><div class="brand"><span>✓</span> BEST TODO</div>${demo ? `<div class="demo-banner">デモ環境 · ${esc(new Date(demo.nextResetAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }))} にリセット</div>` : ''}<div class="search"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" aria-label="タスクを検索" placeholder="検索" value="${esc(state.query)}" autocomplete="off" enterkeyhint="search">${state.query ? '<button type="button" class="icon-button" data-clear-search aria-label="検索をクリア">×</button>' : ''}</div><nav>${
       state.lists.some((l) => l.pinned)
         ? `<div class="list-caption">ピン留め</div>${sidebarLists
             .filter((l) => l.pinned)

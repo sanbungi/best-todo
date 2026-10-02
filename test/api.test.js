@@ -38,6 +38,7 @@ test('API lifecycle, validation, persistence and cascading deletion', async () =
       child.on('error', reject);
     });
     assert.equal((await fetch(base + '/api/tasks')).status, 401);
+    assert.equal((await fetch(base + '/api/demo')).status, 404);
     token = (
       await req('/auth/login', 'POST', { username: 'tester', password: 'test-password-123' })
     ).token;
