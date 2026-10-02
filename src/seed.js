@@ -11,26 +11,26 @@ function seedIdeas(db) {
   try {
     for (const [id, name] of [
       ['ideas', 'アイディア'],
-      ['print', '3Dプリントしたいもの'],
-      ['infra', 'インフラ'],
-      ['travel', '旅'],
-      ['youtube', 'YouTube'],
-      ['blog', 'blog'],
+      ['study', '勉強したいこと'],
+      ['chores', '家事'],
+      ['paperwork', '手続き'],
+      ['travel', '旅行'],
+      ['weekend', '週末やること'],
       ['wish', 'ほしい物リスト'],
     ])
       db.prepare('INSERT OR IGNORE INTO lists (id,name) VALUES (?, ?)').run(id, name);
     [
-      'pcスマホの履歴から日記自動',
-      'センサーと自動農業',
-      '気象観測装置',
-      'タイムアタックゴルフ、格闘あり',
-      '進路をバイブで教えてくれる歩き',
-      'osmをゲームのマップとして変換する、マルチプレイで陣取り合戦',
-      '指定時刻にAPIを呼び出す仕組み',
-      '教育用のマルチプレイ、バーチャル机',
-      'プロンプトシェアアプリ',
-      'dnsサーバーを作ろう',
-      'ニッチ言語系コントリビュート',
+      '家計簿を自動でつけるCLI',
+      '自分用のRSSリーダー',
+      'dotfilesを整理して公開する',
+      '技術ブログを始める',
+      '朝に天気と予定を通知するbot',
+      '積読を管理するアプリ',
+      '冷蔵庫の中身から献立を提案する',
+      'Rustで小さなCLIツールを書く',
+      'OSSのドキュメント修正でコントリビュート',
+      '個人サイトをリニューアル',
+      '自宅の電気代を可視化する',
       '新しいアプリのスケッチ',
     ].forEach((title, i) => {
       db.prepare('INSERT OR IGNORE INTO tasks (id,listId,title,createdAt) VALUES (?,?,?,?)').run(
@@ -149,14 +149,14 @@ function seedVariety(db) {
     ['seed-reading', { kind: 'table', cells: ['リーダブルコード', 'Boswell / Foucher', day(-20)] }],
     ['seed-reading', { title: '次に読む本を選ぶ' }],
     // Existing sample lists get other kinds too.
-    ['wish', { kind: 'table', cells: ['ワイヤレスイヤホン', '¥15,000', '候補比較中'] }],
-    ['wish', { kind: 'table', cells: ['登山靴', '¥22,000'] }],
+    ['wish', { kind: 'table', cells: ['モニターアーム', '¥8,000', '候補比較中'] }],
+    ['wish', { kind: 'table', cells: ['電動昇降デスク', '¥45,000'] }],
     ['wish', { title: 'セール日を調べる', dueDate: day(10) }],
     [
-      'youtube',
-      { kind: 'memo', note: '撮りたい動画\n・3Dプリンタのタイムラプス\n・自宅サーバー紹介' },
+      'weekend',
+      { kind: 'memo', note: '週末やりたいこと\n・作り置き\n・部屋の掃除\n・積読を1冊消化' },
     ],
-    ['youtube', { title: 'サムネイルを作る', important: 1, myDay: day(0) }],
+    ['weekend', { title: '布団を干す', important: 1, myDay: day(0) }],
   ];
   db.exec('BEGIN IMMEDIATE');
   try {
